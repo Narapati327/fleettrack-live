@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FleetTrack Control Room</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{
+  --bg:#0A1424;--panel:#11213A;--panel-2:#172B48;--line:#24395B;--ink:#DCE7F5;--muted:#8CA1BF;
+  --cyan:#38D3F5;--cyan-soft:rgba(56,211,245,.14);--orange:#FF8A2A;--orange-soft:rgba(255,138,42,.15);
+  --green:#3DDC97;--green-soft:rgba(61,220,151,.14);--red:#FF5D6C;--red-soft:rgba(255,93,108,.15);--yellow:#FFC24B;--yellow-soft:rgba(255,194,75,.15);
+  --display:'Chakra Petch','Barlow',system-ui,sans-serif;--body:'Barlow',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;font-variant-numeric:tabular-nums;
+  background-image:radial-gradient(circle at 20% -10%,rgba(56,211,245,.08),transparent 40%),radial-gradient(circle at 100% 0,rgba(255,138,42,.06),transparent 35%)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.bar{position:sticky;top:0;z-index:1000;background:rgba(10,20,36,.94);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+.bar-in{max-width:1360px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:.04em;text-transform:uppercase}
+.logo .mk{width:30px;height:30px;border-radius:7px;background:var(--cyan-soft);border:1px solid var(--cyan);display:grid;place-items:center;color:var(--cyan)}
+.meta{display:flex;align-items:center;gap:14px;color:var(--muted);font-size:13px;flex-wrap:wrap}
+.live{display:inline-flex;align-items:center;gap:6px;font-weight:700}
+.live i{width:8px;height:8px;border-radius:50%}
+.live.on{color:var(--green)}.live.on i{background:var(--green);animation:pulse 1.6s infinite}
+.live.warn{color:var(--yellow)}.live.warn i{background:var(--yellow)}
+.live.off{color:var(--red)}.live.off i{background:var(--red)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(61,220,151,.6)}70%{box-shadow:0 0 0 8px rgba(61,220,151,0)}100%{box-shadow:0 0 0 0 rgba(61,220,151,0)}}
+.src{display:inline-flex;gap:6px}
+.src span{padding:2px 8px;border-radius:999px;background:var(--panel-2);border:1px solid var(--line);font-size:12px}
+.src span.bad{border-color:var(--red);color:var(--red)}
+.btn{border:1px solid var(--line);background:var(--panel-2);border-radius:7px;padding:7px 14px;font-weight:600}
+.btn:hover{border-color:var(--cyan)}
+.btn.cy{background:var(--cyan);color:#05202B;border-color:var(--cyan)}
+.btn.sm{padding:4px 10px;font-size:13px}
+.wrap{max-width:1360px;margin:0 auto;padding-inline:16px;padding-block:16px 40px}
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px}
+.p{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0;display:flex;flex-direction:column;gap:12px;position:relative}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.ph h2{font-family:var(--display);font-size:15px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin:0;display:flex;align-items:center;gap:8px}
+.ph h2::before{content:"";width:3px;height:14px;background:var(--cyan);border-radius:2px}
+.sub{font-size:12px;color:var(--muted)}
+.s7{grid-column:span 7}.s5{grid-column:span 5}.s4{grid-column:span 4}.s3{grid-column:span 3}.s8{grid-column:span 8}.s12{grid-column:span 12}
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.kpi{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:10px;display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center}
+.kpi .ic{width:38px;height:38px;border-radius:10px;display:grid;place-items:center}
+.kpi .v{font-family:var(--display);font-size:22px;font-weight:700;line-height:1}
+.kpi .l{font-size:12px;color:var(--muted)}
+.hero{padding:0;overflow:hidden;min-height:330px}
+.hero > svg{width:100%;height:100%;position:absolute;inset:0}
+.hero .ov{position:relative;z-index:1;padding:14px 16px;display:flex;flex-direction:column;justify-content:space-between;height:100%;min-height:330px}
+.tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.t-cyan{background:var(--cyan-soft);color:var(--cyan)}.t-green{background:var(--green-soft);color:var(--green)}.t-red{background:var(--red-soft);color:var(--red)}.t-yellow{background:var(--yellow-soft);color:var(--yellow)}.t-orange{background:var(--orange-soft);color:var(--orange)}.t-gray{background:rgba(140,161,191,.15);color:var(--muted)}
+.hero-info{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;background:rgba(10,20,36,.8);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.hero-info div span{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.hero-info div b{font-family:var(--display);font-size:17px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fleet{display:flex;flex-direction:column;gap:6px;max-height:420px;overflow:auto}
+.fl{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 10px;border-radius:8px;border:1px solid transparent;background:var(--panel-2);text-align:left;width:100%}
+.fl:hover{border-color:var(--line)}
+.fl[aria-pressed="true"]{border-color:var(--cyan);background:rgba(56,211,245,.08)}
+.fl .ic{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--bg)}
+.fl b{display:block;font-weight:700}
+.fl .sub{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#map{height:420px;border-radius:8px;border:1px solid var(--line);background:#0D1B30}
+.leaflet-container{font-family:var(--body)}
+.leaflet-tile-pane{filter:invert(1) hue-rotate(195deg) brightness(.82) contrast(.9) saturate(.6)}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--panel);color:var(--ink);border:1px solid var(--line)}
+.leaflet-control-attribution{background:rgba(10,20,36,.8)!important;color:var(--muted)!important}
+.leaflet-control-attribution a{color:var(--cyan)!important}
+.tm{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;border:2px solid #0A1424;font:700 10px var(--body);color:#05202B}
+.tm.sel{box-shadow:0 0 0 6px rgba(56,211,245,.25)}
+.gauges{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.gauge{display:flex;flex-direction:column;align-items:center;gap:2px}
+.gauge .l{font-size:12px;color:var(--muted)}
+.meter{height:8px;border-radius:4px;background:var(--panel-2);overflow:hidden;display:block}
+.meter i{display:block;height:100%;border-radius:4px;transition:width .6s}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px}
+.alerts{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto}
+.al{display:flex;gap:10px;align-items:center;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;text-align:left;width:100%}
+.al .ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:none}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--panel-2);border-radius:999px;padding:4px 12px;font-size:13px;font-weight:600;color:var(--muted)}
+.chip[aria-pressed="true"]{border-color:var(--cyan);color:var(--cyan);background:var(--cyan-soft)}
+input[type=search],input[type=text],input[type=number],input[type=password],input[type=datetime-local],select{background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:7px 10px;min-width:0}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:8px;border-bottom:1px solid var(--line);white-space:nowrap;font-weight:600}
+td{padding:8px;border-bottom:1px solid rgba(36,57,91,.6);white-space:nowrap}
+tr:hover td{background:rgba(56,211,245,.04)}
+.addf{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:10px}
+.addf label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:600}
+.err{color:var(--red);font-size:13px}.err:empty{display:none}
+.vcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.vc{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px;text-align:left;width:100%}
+.vc[aria-pressed="true"]{border-color:var(--cyan)}
+.log{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow:auto}
+.lg{display:flex;gap:8px;font-size:13px;align-items:baseline}
+.lg time{color:var(--muted);font-size:12px;flex:none;width:58px}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--cyan);color:#05202B;padding:10px 18px;border-radius:999px;font-weight:700;z-index:2000}
+.toast.bad{background:var(--red);color:#fff}
+.gate{max-width:420px;margin:12vh auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:12px}
+.gate h1{font-family:var(--display);margin:0;font-size:24px}
+.road{animation:road 1.2s linear infinite}
+@keyframes road{to{stroke-dashoffset:-80}}
+.stopped .road{animation-play-state:paused}
+@media (max-width:1100px){.s7,.s5,.s4,.s3,.s8{grid-column:span 6}.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:720px){.grid>*{grid-column:span 12!important}.hero-info{grid-template-columns:repeat(2,minmax(0,1fr))}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#map{height:340px}}
+@media (prefers-reduced-motion:reduce){.road,.live i{animation:none}}
+</style>
+</head>
+<body>
+
+<form class="gate" id="gate" hidden>
+  <h1>Sign in to the control room</h1>
+  <p class="sub" style="margin:0">Enter the API key from your server's .env file (API_KEY).</p>
+  <input type="password" id="keyIn" autocomplete="current-password" placeholder="API key" aria-label="API key">
+  <div class="err" id="keyErr"></div>
+  <button class="btn cy" type="submit">Open dashboard</button>
+</form>
+
+<div id="app" hidden>
+<header class="bar">
+  <div class="bar-in">
+    <div class="logo"><span class="mk" id="logoIc"></span><span id="company">FleetTrack</span></div>
+    <div class="meta">
+      <span id="clock"></span>
+      <span class="src" id="sources"></span>
+      <span class="live warn" id="live"><i></i><span id="liveTxt">Connecting…</span></span>
+      <button class="btn sm" id="signOut" hidden>Sign out</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+<div class="grid">
+
+  <section class="p s7">
+    <div class="ph"><h2>Deliveries · last 14 days</h2><div class="chips" id="seriesChips"><button class="chip" data-series="both" aria-pressed="true">All</button><button class="chip" data-series="done" aria-pressed="false">Delivered</button><button class="chip" data-series="late" aria-pressed="false">Late</button></div></div>
+    <div id="chart"></div>
+    <div class="kpis" id="kpis"></div>
+  </section>
+
+  <section class="p hero s5" id="hero">
+    <svg id="heroSvg" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+    <div class="ov">
+      <div class="ph"><span class="tag" id="heroTag"></span><span class="sub" id="heroType" style="color:var(--ink)"></span></div>
+      <div>
+        <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px"><span style="font-family:var(--display);font-size:26px;font-weight:700" id="heroPlate">–</span><span class="sub" id="heroSeen"></span><span id="heroWx"></span></div>
+        <div class="hero-info">
+          <div><span>Driver</span><b id="hDriver">–</b></div>
+          <div><span>Speed</span><b id="hSpeed">–</b></div>
+          <div><span>Heading to</span><b id="hDest">–</b></div>
+          <div><span>ETA</span><b id="hEta">–</b></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="p s4">
+    <div class="ph"><h2>Fleet status</h2><span class="sub" id="fleetSum"></span></div>
+    <div class="fleet" id="fleetList"><div class="sub">Waiting for GPS data…</div></div>
+  </section>
+
+  <section class="p s5">
+    <div class="ph"><h2>Live map</h2><span class="sub" id="gpsAge"></span></div>
+    <div id="map"></div>
+  </section>
+
+  <section class="p s3">
+    <div class="ph"><h2>Vehicle health</h2><span class="sub" id="vhPlate"></span></div>
+    <div class="gauges">
+      <div class="gauge"><svg id="gSpeed" viewBox="0 0 120 120" width="120" height="120"></svg><span class="l">Speed km/h</span></div>
+      <div class="gauge"><svg id="gFuel" viewBox="0 0 120 120" width="120" height="120"></svg><span class="l">Fuel %</span></div>
+    </div>
+    <div><div class="row"><span class="sub">Load</span><b id="vhLoad">–</b></div><span class="meter"><i id="vhLoadBar" style="background:var(--orange);width:0"></i></span></div>
+    <div class="row"><span class="sub">Odometer</span><b id="vhOdo">–</b></div>
+    <div class="row"><span class="sub">Driver phone</span><b id="vhPhone">–</b></div>
+    <div class="row"><span class="sub">Position</span><b id="vhPos" style="font-weight:500;font-size:12px">–</b></div>
+  </section>
+
+  <section class="p s8">
+    <div class="ph"><h2>Shipments</h2>
+      <div class="tools">
+        <div class="chips" id="statusChips">
+          <button class="chip" data-st="open" aria-pressed="true">Open</button>
+          <button class="chip" data-st="In transit" aria-pressed="false">In transit</button>
+          <button class="chip" data-st="Delayed" aria-pressed="false">Delayed</button>
+          <button class="chip" data-st="Pending" aria-pressed="false">Pending</button>
+          <button class="chip" data-st="Delivered" aria-pressed="false">Delivered</button>
+          <button class="chip" data-st="all" aria-pressed="false">All</button>
+        </div>
+        <input type="search" id="q" placeholder="Search customer or ID" aria-label="Search shipments">
+        <button class="btn cy sm" id="addToggle">+ New shipment</button>
+      </div>
+    </div>
+    <form class="addf" id="addForm" hidden>
+      <label>Customer<input type="text" id="fCust" maxlength="60" placeholder="Santos Grocery"></label>
+      <label>Destination<select id="fDest"></select></label>
+      <label id="fOtherNameL" hidden>Address or place<input type="text" id="fOtherName" maxlength="120" placeholder="SM Megamall, Mandaluyong"></label>
+      <div id="fFindW" hidden style="display:flex;align-items:end"><button class="btn" type="button" id="fFind">Find on map</button></div>
+      <label id="fResL" hidden>Pick the right place<select id="fRes"></select></label>
+      <label id="fOtherLLL" hidden>Lat, Lng (filled in for you)<input type="text" id="fOtherLL" placeholder="14.5873, 121.1760"></label>
+      <label>Weight (kg)<input type="number" id="fKg" min="0" step="1" placeholder="850"></label>
+      <label>Truck<select id="fTruck"></select></label>
+      <label>Due by<input type="datetime-local" id="fDue"></label>
+      <div style="display:flex;gap:6px"><button class="btn cy" type="submit">Add</button><button class="btn" type="button" id="fCancel">Cancel</button></div>
+      <div class="err" id="fErr" style="grid-column:1/-1"></div>
+    </form>
+    <div class="tw"><table><thead><tr><th>ID</th><th>Customer</th><th>Destination</th><th>Weather</th><th>Truck</th><th style="text-align:right">Weight</th><th>Due</th><th>ETA</th><th>Status</th><th></th></tr></thead><tbody id="shipBody"></tbody></table></div>
+  </section>
+
+  <section class="p s4">
+    <div class="ph"><h2>Alerts</h2><span class="sub" id="alertCount"></span></div>
+    <div class="alerts" id="alerts"></div>
+    <div class="ph" style="margin-top:4px"><h2>Activity</h2></div>
+    <div class="log" id="log"></div>
+  </section>
+
+  <section class="p s12">
+    <div class="ph"><h2>Vehicles</h2><span class="sub">Tap a card to follow that truck</span></div>
+    <div class="vcards" id="vcards"></div>
+  </section>
+
+</div>
+<p class="sub" style="text-align:center;margin-top:16px" id="foot"></p>
+</div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+const TZ="Asia/Manila";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const I={
+ truck:'<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>',
+ box:'<path d="M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10"/>',
+ check:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 10"/>',
+ clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+ fuel:'<path d="M4 20V5a1 1 0 011-1h8a1 1 0 011 1v15M3 20h12M14 9h2a2 2 0 012 2v5a1.5 1.5 0 003 0V8l-3-3"/><path d="M6 8h6"/>',
+ wrench:'<path d="M14.7 6.3a4 4 0 00-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 005.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z"/>',
+ alert:'<path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17.5v.5"/>',
+ gauge:'<path d="M4 17a8 8 0 1116 0"/><path d="M12 17l4-5"/>',
+ route:'<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 000-6H9a3 3 0 010-6h7"/>',
+ wifi:'<path d="M5 12.5a10 10 0 0114 0M8.5 16a5 5 0 017 0M2 9a14 14 0 0120 0"/><circle cx="12" cy="19.5" r="1"/>',
+ rain:'<path d="M7 15a4 4 0 01-.6-7.96A5.5 5.5 0 0117 7.5a3.75 3.75 0 01.5 7.5z"/><path d="M8 18l-1 2M12 18l-1 2M16 18l-1 2"/>',
+ sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+ cloud:'<path d="M7 18a4 4 0 01-.6-7.96A5.5 5.5 0 0117 10.5a3.75 3.75 0 01.5 7.5z"/>'
+};
+const ic=(n,c,s)=>'<svg width="'+(s||18)+'" height="'+(s||18)+'" viewBox="0 0 24 24" fill="none" stroke="'+(c||"currentColor")+'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+I[n]+'</svg>';
+$("logoIc").innerHTML=ic("route","var(--cyan)",18);
+
+const fmtTime=iso=>iso?new Date(iso).toLocaleTimeString("en-PH",{timeZone:TZ,hour:"numeric",minute:"2-digit"}):"–";
+const fmtDue=iso=>{if(!iso)return "–";const d=new Date(iso);const same=d.toLocaleDateString("en-PH",{timeZone:TZ})===new Date().toLocaleDateString("en-PH",{timeZone:TZ});return same?fmtTime(iso):d.toLocaleDateString("en-PH",{timeZone:TZ,month:"short",day:"numeric"})+" "+fmtTime(iso)};
+const mins=m=>m==null?"–":m<60?m+" min":Math.floor(m/60)+" h "+(m%60)+" min";
+let tT;function toast(m,bad){const t=$("toast");t.textContent=m;t.className="toast"+(bad?" bad":"");t.hidden=false;clearTimeout(tT);tT=setTimeout(()=>t.hidden=true,2800)}
+
+/* ---------- auth + connection ---------- */
+let KEY="";try{KEY=localStorage.getItem("fleettrack-key")||""}catch(e){}
+const headers=()=>Object.assign({"Content-Type":"application/json"},KEY?{"X-Api-Key":KEY}:{});
+async function api(method,path,body){
+  const r=await fetch(path,{method,headers:headers(),body:body?JSON.stringify(body):undefined});
+  const d=await r.json().catch(()=>({}));
+  if(r.status===401){showGate("Your key was not accepted. Enter it again.");throw new Error("unauthorized")}
+  if(!r.ok)throw new Error(d.error||("Server answered "+r.status));
+  return d;
+}
+function showGate(msg){$("app").hidden=true;$("gate").hidden=false;$("keyErr").textContent=msg||"";$("keyIn").focus();if(es){es.close();es=null}}
+$("gate").addEventListener("submit",async e=>{
+  e.preventDefault();const k=$("keyIn").value.trim();
+  if(!k){$("keyErr").textContent="Enter your API key.";return}
+  KEY=k;try{localStorage.setItem("fleettrack-key",k)}catch(e){}
+  start();
+});
+$("signOut").onclick=()=>{try{localStorage.removeItem("fleettrack-key")}catch(e){}KEY="";showGate()};
+
+let es=null,D=null,lastMsg=0,retryT=null;
+function setLive(cls,txt){$("live").className="live "+cls;$("liveTxt").textContent=txt}
+async function start(){
+  try{D=await api("GET","/api/snapshot")}catch(e){if(e.message!=="unauthorized"){setLive("off","Server unreachable");$("app").hidden=false;$("gate").hidden=true;retryT=setTimeout(start,5000)}return}
+  $("gate").hidden=true;$("app").hidden=false;$("signOut").hidden=!KEY;
+  initMap();render();connect();
+}
+function connect(){
+  if(es)es.close();
+  es=new EventSource("/api/stream"+(KEY?"?key="+encodeURIComponent(KEY):""));
+  es.addEventListener("snapshot",ev=>{D=JSON.parse(ev.data);lastMsg=Date.now();setLive("on","Live");render()});
+  es.onerror=()=>{setLive("warn","Reconnecting…")};
+}
+setInterval(()=>{if(D&&lastMsg&&Date.now()-lastMsg>45000)setLive("off","No updates for "+Math.round((Date.now()-lastMsg)/1000)+"s")},5000);
+
+/* ---------- state ---------- */
+let sel=null,series="both",filterSt="open";
+const stateTag=s=>({"on route":["t-cyan","On route"],"stopped":["t-yellow","Stopped"],"moving":["t-cyan","Moving"],"idle":["t-green","Idle"],"offline":["t-red","Offline"],"maintenance":["t-gray","Maintenance"]}[s]||["t-gray",s]);
+const shipTag=s=>({"In transit":"t-cyan","Delayed":"t-red","Pending":"t-yellow","Delivered":"t-green","Cancelled":"t-gray"}[s]||"t-gray");
+function wxTag(w,short){
+  if(!w)return '<span class="sub">–</span>';
+  const cls=w.risk>=2?"t-red":w.risk===1?"t-yellow":"t-gray";
+  const icn=w.risk>=1?"rain":(w.code<=1?"sun":"cloud");
+  const col=w.risk>=2?"var(--red)":w.risk===1?"var(--yellow)":"var(--muted)";
+  return '<span class="tag '+cls+'" title="'+esc(w.label+" · "+Math.round(w.tempC)+"°C · rain next 3 h: "+Math.round(w.nextRainProb)+"%"+(w.gustsKmh?" · gusts "+Math.round(w.gustsKmh)+" km/h":""))+'">'+ic(icn,col,13)+esc(short?Math.round(w.tempC)+"°":w.label+" "+Math.round(w.tempC)+"°")+'</span>';
+}
+const stateColor=s=>({"on route":"#38D3F5","moving":"#38D3F5","stopped":"#FFC24B","idle":"#3DDC97","offline":"#FF5D6C","maintenance":"#8CA1BF"}[s]||"#8CA1BF");
+
+/* ---------- map ---------- */
+let map=null,markers={},trail=null,destMarker=null,placeLayer=null,fitted=false;
+function initMap(){
+  if(map||!window.L){if(!window.L)$("map").innerHTML='<div class="sub" style="padding:16px">The map needs an internet connection to load.</div>';return}
+  map=L.map("map",{zoomControl:true,attributionControl:true}).setView([14.6,121.0],11);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+  placeLayer=L.layerGroup().addTo(map);
+}
+function renderMap(){
+  if(!map)return;
+  placeLayer.clearLayers();
+  (D.places||[]).forEach(p=>{L.circleMarker([p.lat,p.lng],{radius:p.depot?7:4,color:p.depot?"#FF8A2A":"#8CA1BF",weight:2,fillColor:"#0A1424",fillOpacity:1}).bindTooltip(esc(p.name)+(p.depot?" (depot)":""),{direction:"top"}).addTo(placeLayer)});
+  const seen=new Set();const pts=[];
+  D.vehicles.forEach(v=>{
+    if(!v.position)return;seen.add(v.id);const ll=[v.position.lat,v.position.lng];pts.push(ll);
+    const html='<div class="tm'+(v.id===sel?' sel':'')+'" style="background:'+stateColor(v.state)+'">'+esc(v.plate.split(" ").pop().slice(-2))+'</div>';
+    const icon=L.divIcon({html,className:"",iconSize:[30,30],iconAnchor:[15,15]});
+    if(markers[v.id]){markers[v.id].setLatLng(ll);markers[v.id].setIcon(icon)}
+    else{markers[v.id]=L.marker(ll,{icon,keyboard:true,title:v.plate}).addTo(map).on("click",()=>select(v.id))}
+    markers[v.id].bindTooltip(esc(v.plate)+" · "+stateTag(v.state)[1]+(v.speedKmh!=null?" · "+Math.round(v.speedKmh)+" km/h":""),{direction:"top",offset:[0,-14]});
+  });
+  Object.keys(markers).forEach(id=>{if(!seen.has(id)){map.removeLayer(markers[id]);delete markers[id]}});
+  const v=D.vehicles.find(x=>x.id===sel);
+  if(trail){map.removeLayer(trail);trail=null}
+  if(destMarker){map.removeLayer(destMarker);destMarker=null}
+  if(v&&v.trail&&v.trail.length>1)trail=L.polyline(v.trail,{color:"#38D3F5",weight:3,opacity:.8,dashArray:"6 6"}).addTo(map);
+  const job=v&&v.currentShipment&&D.shipments.find(s=>s.id===v.currentShipment);
+  if(job&&job.destLat!=null){destMarker=L.polyline([[v.position.lat,v.position.lng],[job.destLat,job.destLng]],{color:"#FF8A2A",weight:2,opacity:.7,dashArray:"2 8"}).addTo(map)}
+  if(!fitted&&pts.length){map.fitBounds(L.latLngBounds(pts.concat((D.places||[]).map(p=>[p.lat,p.lng]))).pad(0.1));fitted=true}
+}
+
+/* ---------- chart ---------- */
+function renderChart(){
+  const days=D.summary.daily||[];if(!days.length){$("chart").innerHTML='<div class="sub">No deliveries recorded yet.</div>';return}
+  const done=days.map(d=>d.delivered),late=days.map(d=>d.late);
+  const W=700,H=200,L=34,R=26,Tp=14,B=26,n=days.length;
+  const top=Math.max(10,...done);const step=top>50?20:top>20?10:5;const max=Math.ceil(top*1.15/step)*step;
+  const x=i=>L+(W-L-R)*i/Math.max(1,n-1),y=v=>Tp+(H-Tp-B)*(1-v/max);
+  let g='<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="Daily delivered and late shipments, last 14 days"><defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#38D3F5" stop-opacity=".35"/><stop offset="1" stop-color="#38D3F5" stop-opacity="0"/></linearGradient><linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF8A2A" stop-opacity=".35"/><stop offset="1" stop-color="#FF8A2A" stop-opacity="0"/></linearGradient></defs>';
+  for(let v=0;v<=max;v+=step)g+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="#1C3152"/><text x="'+(L-6)+'" y="'+(y(v)+4)+'" text-anchor="end" fill="#8CA1BF" font-size="11">'+v+'</text>';
+  days.forEach((d,i)=>{if(i%2===1||i===n-1)g+='<text x="'+x(i)+'" y="'+(H-6)+'" text-anchor="middle" fill="#8CA1BF" font-size="11">'+new Date(d.date+"T00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric"})+'</text>'});
+  const line=(a,c,gr)=>{const p=a.map((v,i)=>x(i)+","+y(v));return '<path d="M'+x(0)+','+y(0)+' L'+p.join(" L")+' L'+x(n-1)+','+y(0)+'Z" fill="url(#'+gr+')"/><polyline points="'+p.join(" ")+'" fill="none" stroke="'+c+'" stroke-width="2.4" stroke-linejoin="round"/>'+a.map((v,i)=>'<circle cx="'+x(i)+'" cy="'+y(v)+'" r="'+(i===n-1?4.5:2.5)+'" fill="'+c+'"/>').join("")};
+  if(series!=="late")g+=line(done,"#38D3F5","ga");
+  if(series!=="done")g+=line(late,"#FF8A2A","gb");
+  const cw=(W-L-R)/Math.max(1,n-1);
+  days.forEach((d,i)=>{g+='<rect x="'+(x(i)-cw/2)+'" y="'+Tp+'" width="'+cw+'" height="'+(H-Tp-B)+'" fill="transparent"><title>'+new Date(d.date+"T00:00").toLocaleDateString("en-PH",{weekday:"short",month:"short",day:"numeric"})+' · Delivered '+d.delivered+' · Late '+d.late+'</title></rect>'});
+  $("chart").innerHTML=g+'</svg>';
+}
+document.querySelectorAll("[data-series]").forEach(b=>b.onclick=()=>{series=b.dataset.series;document.querySelectorAll("[data-series]").forEach(c=>c.setAttribute("aria-pressed",c===b));renderChart()});
+
+/* ---------- hero ---------- */
+(function buildHero(){
+ let h='<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1A33"/><stop offset="1" stop-color="#1B3358"/></linearGradient><linearGradient id="trl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F2F6FB"/><stop offset="1" stop-color="#B9C6D8"/></linearGradient><linearGradient id="cab" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#C9D5E6"/></linearGradient><radialGradient id="beam" cx="0" cy=".5" r="1"><stop offset="0" stop-color="#FFF3C4" stop-opacity=".55"/><stop offset="1" stop-color="#FFF3C4" stop-opacity="0"/></radialGradient></defs><rect width="600" height="400" fill="url(#sky)"/>';
+ for(let i=0;i<40;i++)h+='<circle cx="'+((i*137)%600)+'" cy="'+((i*53)%150)+'" r="'+(i%3?0.8:1.3)+'" fill="#CFE3FF" opacity="'+(0.3+((i*7)%5)/10)+'"/>';
+ h+='<circle cx="470" cy="60" r="20" fill="#E9F1FF" opacity=".85"/><circle cx="479" cy="54" r="18" fill="#0F2240"/><path d="M0 200 L80 176 L150 190 L230 166 L320 186 L420 160 L520 180 L600 170 L600 236 L0 236Z" fill="#132646"/><path d="M0 222 L600 210 L600 400 L0 400Z" fill="#0E1A2C"/><line x1="0" y1="262" x2="600" y2="250" stroke="#FFC24B" stroke-width="4" stroke-dasharray="40 40" class="road"/><path d="M452 168 L600 128 L600 220Z" fill="url(#beam)"/>';
+ h+='<g transform="translate(88 70) scale(.9)"><rect x="0" y="20" width="300" height="110" rx="6" fill="url(#trl)"/><rect x="0" y="20" width="300" height="10" fill="#38D3F5" opacity=".9"/><text id="heroBrand" x="24" y="90" font-family="Chakra Petch, sans-serif" font-size="30" font-weight="700" fill="#1F3A5F" opacity=".75">FLEETTRACK</text><rect x="300" y="118" width="20" height="8" fill="#2A3B55"/><path d="M318 46 h56 a10 10 0 0 1 9 6 l20 40 v36 a6 6 0 0 1 -6 6 h-79z" fill="url(#cab)"/><path d="M332 56 h38 l17 34 h-55z" fill="#16304F"/><rect x="392" y="104" width="12" height="8" rx="2" fill="#FFE9A3"/><rect x="318" y="96" width="85" height="4" fill="#38D3F5"/>';
+ [40,80,250,290,350].forEach(cx=>{h+='<circle cx="'+cx+'" cy="140" r="17" fill="#0B1424"/><circle cx="'+cx+'" cy="140" r="7" fill="#5B6E8C"/>'});
+ $("heroSvg").innerHTML=h+'</g>';
+})();
+
+function ring(id,val,max,col,label){
+ const r=48,c=2*Math.PI*r,arc=c*.75,p=val==null?0:Math.max(0,Math.min(1,val/max));
+ $(id).innerHTML='<circle cx="60" cy="60" r="'+r+'" fill="none" stroke="#1C3152" stroke-width="9" stroke-dasharray="'+arc+' '+c+'" transform="rotate(135 60 60)" stroke-linecap="round"/><circle cx="60" cy="60" r="'+r+'" fill="none" stroke="'+col+'" stroke-width="9" stroke-dasharray="'+(arc*p)+' '+c+'" transform="rotate(135 60 60)" stroke-linecap="round" style="transition:stroke-dasharray .6s"/><circle cx="60" cy="60" r="34" fill="none" stroke="'+col+'" stroke-opacity=".25" stroke-dasharray="2 4"/><text x="60" y="66" text-anchor="middle" font-family="Chakra Petch, sans-serif" font-size="24" font-weight="700" fill="#DCE7F5">'+label+'</text>';
+}
+
+/* ---------- render ---------- */
+function render(){
+  if(!D)return;
+  const S=D.summary;
+  $("company").textContent=S.company;document.title=S.company+" Control Room";
+  const brand=document.getElementById("heroBrand");if(brand)brand.textContent=S.company.toUpperCase().slice(0,14);
+  const h=S.sources.health;
+  $("sources").innerHTML='<span class="'+(h.gps.ok?'':'bad')+'" title="'+esc(h.gps.error||("Last update "+fmtTime(h.gps.lastOk)))+'">GPS: '+esc(S.sources.gps)+'</span><span class="'+(h.records.ok?'':'bad')+'" title="'+esc(h.records.error||("Last sync "+fmtTime(h.records.lastOk)))+'">Records: '+esc(S.sources.records==="sheets"?"Google Sheets":S.sources.records)+'</span>';
+  const chip=(on,ok,label,tip)=>on?'<span class="'+(ok===false?'bad':'')+'" title="'+esc(tip||"")+'">'+label+'</span>':'';
+  $("sources").innerHTML+=chip(S.sources.weather,h.weather&&h.weather.ok,"Weather",h.weather&&(h.weather.error||("Updated "+fmtTime(h.weather.lastOk))))+chip(S.sources.telegram,h.telegram&&h.telegram.ok,"Telegram",h.telegram&&(h.telegram.error||(h.telegram.lastOk?"Last sent "+fmtTime(h.telegram.lastOk):"Ready")));
+  $("gpsAge").textContent=h.gps.lastOk?"GPS updated "+fmtTime(h.gps.lastOk):(h.gps.error?"GPS error: "+h.gps.error:"");
+  $("foot").textContent=(S.sources.gps==="simulator"?"GPS simulator is on: trucks are not real. Set GPS_PROVIDER in .env to connect your tracking provider. ":"")+"Times shown in Philippine time.";
+  if(!sel||!D.vehicles.find(v=>v.id===sel)){const f=D.vehicles.find(v=>v.state==="on route")||D.vehicles[0];sel=f?f.id:null}
+  renderKpis();renderChart();renderFleet();renderSel();renderMap();renderAlerts();renderShips();renderLog();
+}
+function renderKpis(){
+  const S=D.summary.shipments;
+  const k=[["truck","var(--cyan)","var(--cyan-soft)",S.inTransit,"In transit"],["check","var(--green)","var(--green-soft)",S.deliveredToday,"Delivered today"],["alert","var(--red)","var(--red-soft)",S.delayed,"Delayed"],["box","var(--yellow)","var(--yellow-soft)",S.pending,"Pending"],["clock","var(--orange)","var(--orange-soft)",D.summary.onTimeRate14d==null?"–":D.summary.onTimeRate14d+"%","On-time · 14 days"]];
+  $("kpis").innerHTML=k.map(v=>'<div class="kpi"><span class="ic" style="background:'+v[2]+'">'+ic(v[0],v[1],22)+'</span><span class="v">'+v[3]+'</span><span class="l">'+v[4]+'</span></div>').join("");
+}
+function renderFleet(){
+  const V=D.summary.vehicles;
+  $("fleetSum").textContent=V.onRoute+" of "+V.total+" on the road";
+  $("fleetList").innerHTML=D.vehicles.length?D.vehicles.map(v=>{const tg=stateTag(v.state);const line=v.destination?"to "+v.destination+" · "+mins(v.etaMinutes):v.state==="offline"?"last seen "+mins(v.lastSeenMinutes)+" ago":tg[1];
+    return '<button class="fl" data-sel="'+esc(v.id)+'" aria-pressed="'+(v.id===sel)+'"><span class="ic">'+ic("truck",stateColor(v.state),20)+'</span><span style="min-width:0"><b>'+esc(v.plate)+'</b><span class="sub">'+esc(v.driver||"")+' · '+esc(line)+'</span></span><span class="tag '+tg[0]+'">'+tg[1]+'</span></button>'}).join(""):'<div class="sub">No vehicles found. Add them to your Vehicles list.</div>';
+  $("vcards").innerHTML=D.vehicles.map(v=>{const tg=stateTag(v.state);const f=v.fuelPercent;const fc=f==null?"var(--muted)":f<20?"var(--red)":f<40?"var(--yellow)":"var(--green)";
+    return '<button class="vc" data-sel="'+esc(v.id)+'" aria-pressed="'+(v.id===sel)+'"><span class="row"><b style="font-family:var(--display);font-size:16px">'+esc(v.plate)+'</b><span class="tag '+tg[0]+'">'+tg[1]+'</span></span><span class="sub">'+esc(v.type||"")+'</span><span class="row"><span class="sub">Fuel</span><b style="color:'+(f!=null&&f<20?"var(--red)":"var(--ink)")+'">'+(f==null?"–":Math.round(f)+"%")+'</b></span><span class="meter"><i style="width:'+(f||0)+'%;background:'+fc+'"></i></span><span class="row"><span class="sub">Load</span><b>'+(v.loadPercent==null?"–":v.loadPercent+"%")+'</b></span><span class="row"><span class="sub">Speed</span><b>'+(v.speedKmh==null?"–":Math.round(v.speedKmh)+" km/h")+'</b></span></button>'}).join("");
+}
+function renderSel(){
+  const v=D.vehicles.find(x=>x.id===sel);
+  if(!v){$("heroPlate").textContent="No vehicle";return}
+  const tg=stateTag(v.state);
+  $("heroTag").className="tag "+tg[0];$("heroTag").textContent=tg[1];$("heroType").textContent=v.type||"";
+  $("heroPlate").textContent=v.plate;$("heroSeen").textContent=v.position?"GPS "+(v.lastSeenMinutes===0?"just now":mins(v.lastSeenMinutes)+" ago"):"No GPS signal";
+  $("hDriver").textContent=(v.driver||"–").split(" ")[0];$("hSpeed").textContent=v.speedKmh==null?"–":Math.round(v.speedKmh)+" km/h";
+  $("hDest").textContent=v.destination||(v.state==="idle"?"At base":"–");
+  $("heroWx").innerHTML=v.destinationWeather?wxTag(v.destinationWeather):"";$("hEta").textContent=v.etaMinutes!=null?mins(v.etaMinutes):"–";
+  $("hero").classList.toggle("stopped",!(v.speedKmh>3));
+  $("vhPlate").textContent=v.plate;
+  ring("gSpeed",v.speedKmh,120,v.speedKmh>80?"#FF5D6C":"#38D3F5",v.speedKmh==null?"–":Math.round(v.speedKmh));
+  ring("gFuel",v.fuelPercent,100,v.fuelPercent==null?"#8CA1BF":v.fuelPercent<20?"#FF5D6C":v.fuelPercent<40?"#FFC24B":"#3DDC97",v.fuelPercent==null?"–":Math.round(v.fuelPercent));
+  $("vhLoad").textContent=v.loadPercent==null?(v.loadKg?v.loadKg.toLocaleString()+" kg":"–"):v.loadKg.toLocaleString()+" kg · "+v.loadPercent+"%";$("vhLoadBar").style.width=(v.loadPercent||0)+"%";
+  $("vhOdo").textContent=v.odometerKm==null?"–":Math.round(v.odometerKm).toLocaleString()+" km";
+  $("vhPhone").textContent=v.phone||"–";
+  $("vhPos").textContent=v.position?v.position.lat.toFixed(4)+", "+v.position.lng.toFixed(4):"–";
+}
+function renderAlerts(){
+  const A=D.alerts||[];
+  const look={critical:["var(--red)","var(--red-soft)"],warning:["var(--yellow)","var(--yellow-soft)"],info:["var(--cyan)","var(--cyan-soft)"]};
+  const icon={low_fuel:"fuel",delayed:"clock",overspeed:"gauge",offline:"wifi",maintenance:"wrench",unassigned:"box",overdue_pending:"alert",overload:"alert",weather:"rain"};
+  $("alertCount").textContent=A.length+" active";
+  $("alerts").innerHTML=A.length?A.map(a=>{const l=look[a.level]||look.info;return '<button class="al"'+(a.vehicle?' data-sel="'+esc(a.vehicle)+'"':'')+(a.shipment?' data-ship="'+esc(a.shipment)+'"':'')+'><span class="ic" style="background:'+l[1]+'">'+ic(icon[a.type]||"alert",l[0],16)+'</span><span style="font-size:13px">'+esc(a.text)+'</span></button>'}).join(""):'<div class="sub">No alerts. Everything is running on schedule.</div>';
+}
+function renderLog(){
+  const E=D.events||[];
+  $("log").innerHTML=E.length?E.map(l=>'<div class="lg"><time>'+fmtTime(l.at)+'</time><span style="color:'+({delivered:"var(--green)",create:"var(--cyan)",system:"var(--muted)"}[l.kind]||"var(--ink)")+'">'+esc(l.text)+'</span></div>').join(""):'<div class="sub">Fleet events show here.</div>';
+}
+function renderShips(){
+  const q=$("q").value.trim().toLowerCase();
+  const rows=D.shipments.filter(s=>filterSt==="all"||(filterSt==="open"?(s.status==="Pending"||s.status==="In transit"):filterSt==="Delayed"?s.displayStatus==="Delayed":s.status===filterSt&&(filterSt!=="In transit"||s.displayStatus!=="Delayed")))
+    .filter(s=>!q||[s.id,s.customer,s.destination].some(x=>String(x).toLowerCase().includes(q))).slice(0,150);
+  $("shipBody").innerHTML=rows.length?rows.map(s=>{
+    const eta=s.status==="Delivered"?"Done "+fmtTime(s.deliveredAt):s.etaAt?fmtTime(s.etaAt)+' <span class="sub">('+mins(s.etaMinutes)+(s.weatherSlowdown?', weather':'')+')</span>':"–";
+    const truck=s.truck?'<button class="btn sm" data-sel="'+esc(s.truck)+'">'+esc(s.plate||s.truck)+'</button>':'<select data-assign="'+esc(s.id)+'" aria-label="Assign truck to '+esc(s.id)+'"><option value="">Assign…</option>'+D.vehicles.filter(v=>v.state!=="maintenance").map(v=>'<option value="'+esc(v.id)+'">'+esc(v.plate)+'</option>').join("")+'</select>';
+    const act=s.status==="In transit"||s.status==="Pending"?'<button class="btn sm" data-done="'+esc(s.id)+'" title="Mark delivered" aria-label="Mark '+esc(s.id)+' delivered">✓ Done</button>':'';
+    return '<tr><td style="font-family:var(--display);color:var(--cyan)">'+esc(s.id)+'</td><td>'+esc(s.customer)+'</td><td>'+esc(s.destination)+'</td><td>'+(s.status==="Pending"||s.status==="In transit"?wxTag(s.weather,s.weather&&s.weather.risk===0):'<span class="sub">–</span>')+'</td><td>'+truck+'</td><td style="text-align:right">'+(Number(s.weightKg)||0).toLocaleString()+' kg</td><td>'+fmtDue(s.dueBy)+'</td><td>'+eta+'</td><td><span class="tag '+shipTag(s.displayStatus)+'">'+esc(s.displayStatus)+(s.status==="Delivered"&&s.late?" late":"")+'</span></td><td>'+act+'</td></tr>'}).join(""):'<tr><td colspan="10" class="sub" style="padding:16px 8px">No shipments match.</td></tr>';
+}
+
+function select(id){sel=id;renderFleet();renderSel();renderMap();const v=D.vehicles.find(x=>x.id===id);if(map&&v&&v.position)map.panTo([v.position.lat,v.position.lng])}
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-sel]");if(b){select(b.dataset.sel);return}
+  const sh=e.target.closest("[data-ship]");if(sh){filterSt="all";document.querySelectorAll("[data-st]").forEach(c=>c.setAttribute("aria-pressed",c.dataset.st==="all"));$("q").value=sh.dataset.ship;renderShips();$("q").scrollIntoView({behavior:"smooth",block:"center"})}
+});
+document.querySelectorAll("[data-st]").forEach(b=>b.onclick=()=>{filterSt=b.dataset.st;document.querySelectorAll("[data-st]").forEach(c=>c.setAttribute("aria-pressed",c===b));renderShips()});
+$("q").addEventListener("input",renderShips);
+$("shipBody").addEventListener("click",async e=>{
+  const b=e.target.closest("[data-done]");if(!b)return;b.disabled=true;
+  try{const s=await api("PATCH","/api/shipments/"+encodeURIComponent(b.dataset.done),{status:"Delivered"});toast(s.id+" marked delivered")}catch(err){if(err.message!=="unauthorized")toast(err.message,true);b.disabled=false}
+});
+$("shipBody").addEventListener("change",async e=>{
+  const s=e.target.closest("[data-assign]");if(!s||!s.value)return;
+  try{const r=await api("PATCH","/api/shipments/"+encodeURIComponent(s.dataset.assign),{truck:s.value});toast(r.id+" assigned to "+r.plate)}catch(err){if(err.message!=="unauthorized")toast(err.message,true)}
+});
+
+$("addToggle").onclick=()=>{
+  const pl=(D.places||[]).slice().sort((a,b)=>(a.depot-b.depot)||a.name.localeCompare(b.name));
+  $("fDest").innerHTML=pl.map(p=>'<option value="'+esc(p.name)+'">'+esc(p.name)+(p.depot?' (depot)':'')+'</option>').join("")+'<option value="__other">Other location… (type it in)</option>';
+  showOther();
+  $("fTruck").innerHTML='<option value="">Assign later</option>'+D.vehicles.filter(v=>v.state!=="maintenance").map(v=>'<option value="'+esc(v.id)+'">'+esc(v.plate)+' · '+stateTag(v.state)[1]+'</option>').join("");
+  $("addForm").hidden=!$("addForm").hidden;if(!$("addForm").hidden)$("fCust").focus();
+};
+let geoHits=[];
+function showOther(){const o=$("fDest").value==="__other";$("fOtherNameL").hidden=!o;$("fOtherLLL").hidden=!o;$("fFindW").hidden=!o;$("fResL").hidden=!o||!geoHits.length}
+async function findAddress(){
+  const q=$("fOtherName").value.trim();$("fErr").textContent="";
+  if(q.length<3){$("fErr").textContent="Type at least 3 characters of the address.";return}
+  $("fFind").disabled=true;$("fFind").textContent="Searching…";
+  try{
+    geoHits=await api("GET","/api/geocode?q="+encodeURIComponent(q)+"&limit=5");
+    if(!geoHits.length){$("fErr").textContent="No match found. Try adding the city, e.g. \"Santos Grocery, Antipolo\".";$("fResL").hidden=true;return}
+    $("fRes").innerHTML=geoHits.map((h,i)=>'<option value="'+i+'">'+esc(h.address||h.name)+'</option>').join("");
+    $("fResL").hidden=false;pickHit(0);
+  }catch(err){if(err.message!=="unauthorized")$("fErr").textContent=err.message}
+  finally{$("fFind").disabled=false;$("fFind").textContent="Find on map"}
+}
+function pickHit(i){const h=geoHits[i];if(!h)return;$("fOtherLL").value=h.lat.toFixed(6)+", "+h.lng.toFixed(6);$("fOtherName").dataset.label=(h.address||h.name).split(",").slice(0,2).join(",").trim()}
+$("fFind").addEventListener("click",findAddress);
+$("fOtherName").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();findAddress()}});
+$("fOtherName").addEventListener("input",()=>{delete $("fOtherName").dataset.label});
+$("fRes").addEventListener("change",e=>pickHit(+e.target.value));
+$("fDest").addEventListener("change",showOther);
+$("fCancel").onclick=()=>{$("addForm").hidden=true;$("fErr").textContent=""};
+$("addForm").addEventListener("input",()=>$("fErr").textContent="");
+$("addForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const customer=$("fCust").value.trim(),kg=$("fKg").value,due=$("fDue").value;
+  if(!customer){$("fErr").textContent="Enter the customer's name.";return}
+  if(kg!==""&&Number(kg)<0){$("fErr").textContent="Weight can't be negative.";return}
+  const body={customer,destination:$("fDest").value,weightKg:kg===""?0:Number(kg),truck:$("fTruck").value||undefined,dueBy:due?due+":00+08:00":undefined};
+  if(body.destination==="__other"){
+    const typed=$("fOtherName").value.trim(),nm=$("fOtherName").dataset.label||typed,llTxt=$("fOtherLL").value.trim(),ll=llTxt.split(/[,\s]+/).filter(Boolean).map(Number);
+    if(!typed){$("fErr").textContent="Type the address or place name.";return}
+    body.destination=nm;
+    if(llTxt){
+      if(ll.length!==2||!ll.every(Number.isFinite)||Math.abs(ll[0])>90){$("fErr").textContent="Lat, Lng should look like: 14.5873, 121.1760. Or clear it and the address will be looked up for you.";return}
+      body.destLat=ll[0];body.destLng=ll[1];
+    }
+  }
+  try{const s=await api("POST","/api/shipments",body);$("addForm").reset();geoHits=[];delete $("fOtherName").dataset.label;$("addForm").hidden=true;toast(s.id+" created")}catch(err){if(err.message!=="unauthorized")$("fErr").textContent=err.message}
+});
+
+function clock(){$("clock").textContent=new Date().toLocaleString("en-PH",{timeZone:TZ,weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit",second:"2-digit"})+" PHT"}
+setInterval(clock,1000);clock();
+
+start();
+})();
+</script>
+</body>
+</html>

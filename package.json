@@ -1,0 +1,20 @@
+{
+  "name": "fleettrack-live",
+  "version": "1.0.0",
+  "description": "Live logistics dashboard with a REST API, real-time stream and an MCP server for Claude.",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "mcp": "node src/mcp-server.js",
+    "telegram": "node src/telegram-setup.js",
+    "test": "node test/smoke.js"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^4.6.6"
+  }
+}
