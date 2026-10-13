@@ -591,8 +591,7 @@ function render(){
   const chip=(on,ok,label,tip)=>on?'<span class="'+(ok===false?'bad':'')+'" title="'+esc(tip||"")+'">'+label+'</span>':'';
   $("sources").innerHTML+=chip(S.sources.weather,h.weather&&h.weather.ok,"Weather",h.weather&&(h.weather.error||("Updated "+fmtTime(h.weather.lastOk))))+chip(S.sources.telegram,h.telegram&&h.telegram.ok,"Telegram",h.telegram&&(h.telegram.error||(h.telegram.lastOk?"Last sent "+fmtTime(h.telegram.lastOk):"Ready")));
   $("gpsAge").textContent=h.gps.lastOk?"GPS updated "+fmtTime(h.gps.lastOk):(h.gps.error?"GPS error: "+h.gps.error:"");
-  $("foot").textContent=(S.sources.gps==="simulator"?"GPS simulator is on: trucks are not real. Set GPS_PROVIDER in .env to connect your tracking provider. ":"")+"Times shown in Philippine time.";
-  if(!sel||!D.vehicles.find(v=>v.id===sel)){const f=D.vehicles.find(v=>v.state==="on route")||D.vehicles[0];sel=f?f.id:null}
+     $("foot").textContent="";  if(!sel||!D.vehicles.find(v=>v.id===sel)){const f=D.vehicles.find(v=>v.state==="on route")||D.vehicles[0];sel=f?f.id:null}
   renderKpis();renderChart();renderFleet();renderSel();renderMap();renderAlerts();renderShips();renderLog();
 }
 function renderKpis(){
