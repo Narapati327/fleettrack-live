@@ -113,8 +113,11 @@ export function createStore() {
   }
 
   async function refreshWeather() {
-    const pts = places.map((p) => ({ lat: p.lat, lng: p.lng }))
-      .concat(shipments.filter((s) => s.status === "Pending" || s.status === "In transit").map((s) => ({ lat: s.destLat, lng: s.destLng })));
+        const depot = places.find((p) => p.depot);
+    const raw = (depot ? [{ lat: depot.lat, lng: depot.lng }] : [])
+      .concat(shipments.filter((s) => (s.status === "Pending" || s.status === "In transit") && s.destLat != null).map((s) => ({ lat: s.destLat, lng: s.destLng })));
+    const seen = new Set();
+    const pts = raw.filter((p) => { const k = `${p.lat.toFixed(2)},${p.lng.toFixed(2)}`; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 40);
     await weather.refresh(pts);
     changed();
     announceAlerts();

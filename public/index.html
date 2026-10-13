@@ -55,6 +55,8 @@ button{cursor:pointer}
 .kpi .l{font-size:12px;color:var(--muted)}
 .hero{padding:0;overflow:hidden;min-height:330px}
 .hero > svg{width:100%;height:100%;position:absolute;inset:0}
+.hero.day #heroType{color:#0B1A33!important;font-weight:600}
+.hero.day #heroTag{background:rgba(11,26,51,.8)}
 .hero .ov{position:relative;z-index:1;padding:14px 16px;display:flex;flex-direction:column;justify-content:space-between;height:100%;min-height:330px}
 .tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap}
 .t-cyan{background:var(--cyan-soft);color:var(--cyan)}.t-green{background:var(--green-soft);color:var(--green)}.t-red{background:var(--red-soft);color:var(--red)}.t-yellow{background:var(--yellow-soft);color:var(--yellow)}.t-orange{background:var(--orange-soft);color:var(--orange)}.t-gray{background:rgba(140,161,191,.15);color:var(--muted)}
@@ -166,6 +168,7 @@ tr:hover td{background:rgba(56,211,245,.04)}
 
   <section class="p s4">
     <div class="ph"><h2>Fleet status</h2><span class="sub" id="fleetSum"></span></div>
+    <div class="chips" id="typeChips" aria-label="Filter by vehicle type"></div>
     <div class="fleet" id="fleetList"><div class="sub">Waiting for GPS data…</div></div>
   </section>
 
@@ -181,6 +184,8 @@ tr:hover td{background:rgba(56,211,245,.04)}
       <div class="gauge"><svg id="gFuel" viewBox="0 0 120 120" width="120" height="120"></svg><span class="l">Fuel %</span></div>
     </div>
     <div><div class="row"><span class="sub">Load</span><b id="vhLoad">–</b></div><span class="meter"><i id="vhLoadBar" style="background:var(--orange);width:0"></i></span></div>
+    <div class="row"><span class="sub">Vehicle type</span><b id="vhType">–</b></div>
+    <div class="row"><span class="sub">Capacity</span><b id="vhCap">–</b></div>
     <div class="row"><span class="sub">Odometer</span><b id="vhOdo">–</b></div>
     <div class="row"><span class="sub">Driver phone</span><b id="vhPhone">–</b></div>
     <div class="row"><span class="sub">Position</span><b id="vhPos" style="font-weight:500;font-size:12px">–</b></div>
@@ -225,7 +230,7 @@ tr:hover td{background:rgba(56,211,245,.04)}
   </section>
 
   <section class="p s12">
-    <div class="ph"><h2>Vehicles</h2><span class="sub">Tap a card to follow that truck</span></div>
+    <div class="ph"><h2>Vehicles</h2><span class="sub" id="vcardsSub">Tap a card to follow the vehicle</span></div>
     <div class="vcards" id="vcards"></div>
   </section>
 
@@ -243,6 +248,11 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const I={
  truck:'<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>',
+ bigtruck:'<path d="M1 5h14v10H1zM15 9h4l3 3v3h-7"/><circle cx="5" cy="17.5" r="1.8"/><circle cx="10" cy="17.5" r="1.8"/><circle cx="18.5" cy="17.5" r="1.8"/>',
+ van:'<path d="M2 16V7a1 1 0 011-1h11l6 5v5"/><path d="M14 6v5h6"/><circle cx="7" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/><path d="M9 16.5h5.5"/>',
+ pickup:'<path d="M2 15v-3h8V8h6l3 4h3v3"/><circle cx="7" cy="16.5" r="2"/><circle cx="17" cy="16.5" r="2"/><path d="M9 16.5h6"/>',
+ moto:'<circle cx="5.5" cy="16.5" r="3"/><circle cx="18.5" cy="16.5" r="3"/><path d="M5.5 16.5l4-6h5l4 6"/><path d="M14.5 10.5L16 6h2.5"/><path d="M9.5 10.5L8 7.5H6"/>',
+ trike:'<circle cx="5" cy="17.5" r="2.2"/><circle cx="12.5" cy="17.5" r="2.2"/><circle cx="19.5" cy="17.5" r="2.2"/><path d="M2.5 15V8a2 2 0 012-2h7v9"/><path d="M11.5 11h4l3 4.5"/>',
  box:'<path d="M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10"/>',
  check:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 10"/>',
  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
@@ -326,11 +336,11 @@ function renderMap(){
   const seen=new Set();const pts=[];
   D.vehicles.forEach(v=>{
     if(!v.position)return;seen.add(v.id);const ll=[v.position.lat,v.position.lng];pts.push(ll);
-    const html='<div class="tm'+(v.id===sel?' sel':'')+'" style="background:'+stateColor(v.state)+'">'+esc(v.plate.split(" ").pop().slice(-2))+'</div>';
+    const html='<div class="tm'+(v.id===sel?' sel':'')+'" style="background:'+stateColor(v.state)+'">'+ic(vCat(v),"#05202B",17)+'</div>';
     const icon=L.divIcon({html,className:"",iconSize:[30,30],iconAnchor:[15,15]});
     if(markers[v.id]){markers[v.id].setLatLng(ll);markers[v.id].setIcon(icon)}
     else{markers[v.id]=L.marker(ll,{icon,keyboard:true,title:v.plate}).addTo(map).on("click",()=>select(v.id))}
-    markers[v.id].bindTooltip(esc(v.plate)+" · "+stateTag(v.state)[1]+(v.speedKmh!=null?" · "+Math.round(v.speedKmh)+" km/h":""),{direction:"top",offset:[0,-14]});
+    markers[v.id].bindTooltip(esc(v.plate)+" · "+esc(v.type||"Vehicle")+" · "+stateTag(v.state)[1]+(v.speedKmh!=null?" · "+Math.round(v.speedKmh)+" km/h":""),{direction:"top",offset:[0,-14]});
   });
   Object.keys(markers).forEach(id=>{if(!seen.has(id)){map.removeLayer(markers[id]);delete markers[id]}});
   const v=D.vehicles.find(x=>x.id===sel);
@@ -362,14 +372,125 @@ function renderChart(){
 document.querySelectorAll("[data-series]").forEach(b=>b.onclick=()=>{series=b.dataset.series;document.querySelectorAll("[data-series]").forEach(c=>c.setAttribute("aria-pressed",c===b));renderChart()});
 
 /* ---------- hero ---------- */
-(function buildHero(){
- let h='<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1A33"/><stop offset="1" stop-color="#1B3358"/></linearGradient><linearGradient id="trl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F2F6FB"/><stop offset="1" stop-color="#B9C6D8"/></linearGradient><linearGradient id="cab" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#C9D5E6"/></linearGradient><radialGradient id="beam" cx="0" cy=".5" r="1"><stop offset="0" stop-color="#FFF3C4" stop-opacity=".55"/><stop offset="1" stop-color="#FFF3C4" stop-opacity="0"/></radialGradient></defs><rect width="600" height="400" fill="url(#sky)"/>';
- for(let i=0;i<40;i++)h+='<circle cx="'+((i*137)%600)+'" cy="'+((i*53)%150)+'" r="'+(i%3?0.8:1.3)+'" fill="#CFE3FF" opacity="'+(0.3+((i*7)%5)/10)+'"/>';
- h+='<circle cx="470" cy="60" r="20" fill="#E9F1FF" opacity=".85"/><circle cx="479" cy="54" r="18" fill="#0F2240"/><path d="M0 200 L80 176 L150 190 L230 166 L320 186 L420 160 L520 180 L600 170 L600 236 L0 236Z" fill="#132646"/><path d="M0 222 L600 210 L600 400 L0 400Z" fill="#0E1A2C"/><line x1="0" y1="262" x2="600" y2="250" stroke="#FFC24B" stroke-width="4" stroke-dasharray="40 40" class="road"/><path d="M452 168 L600 128 L600 220Z" fill="url(#beam)"/>';
- h+='<g transform="translate(88 70) scale(.9)"><rect x="0" y="20" width="300" height="110" rx="6" fill="url(#trl)"/><rect x="0" y="20" width="300" height="10" fill="#38D3F5" opacity=".9"/><text id="heroBrand" x="24" y="90" font-family="Chakra Petch, sans-serif" font-size="30" font-weight="700" fill="#1F3A5F" opacity=".75">FLEETTRACK</text><rect x="300" y="118" width="20" height="8" fill="#2A3B55"/><path d="M318 46 h56 a10 10 0 0 1 9 6 l20 40 v36 a6 6 0 0 1 -6 6 h-79z" fill="url(#cab)"/><path d="M332 56 h38 l17 34 h-55z" fill="#16304F"/><rect x="392" y="104" width="12" height="8" rx="2" fill="#FFE9A3"/><rect x="318" y="96" width="85" height="4" fill="#38D3F5"/>';
- [40,80,250,290,350].forEach(cx=>{h+='<circle cx="'+cx+'" cy="140" r="17" fill="#0B1424"/><circle cx="'+cx+'" cy="140" r="7" fill="#5B6E8C"/>'});
- $("heroSvg").innerHTML=h+'</g>';
-})();
+let heroCat=null;
+function isDay(){const hr=+new Date().toLocaleString("en-US",{timeZone:TZ,hour:"numeric",hour12:false})%24;return hr>=6&&hr<18}
+function buildHero(cat){
+ const day=isDay(),key=cat+(day?"-day":"-night");
+ if(key===heroCat)return; heroCat=key;
+ const hb=document.getElementById("hero");if(hb)hb.classList.toggle("day",day);
+ let h='<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">'+(day?'<stop offset="0" stop-color="#4FA3E3"/><stop offset="1" stop-color="#BFE3F8"/>':'<stop offset="0" stop-color="#0B1A33"/><stop offset="1" stop-color="#1B3358"/>')+'</linearGradient><linearGradient id="trl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F2F6FB"/><stop offset="1" stop-color="#B9C6D8"/></linearGradient><linearGradient id="cab" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#C9D5E6"/></linearGradient><radialGradient id="beam" cx="0" cy=".5" r="1"><stop offset="0" stop-color="#FFF3C4" stop-opacity=".55"/><stop offset="1" stop-color="#FFF3C4" stop-opacity="0"/></radialGradient><radialGradient id="sunGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#FFF6C9" stop-opacity=".9"/><stop offset="1" stop-color="#FFF6C9" stop-opacity="0"/></radialGradient></defs><rect width="600" height="400" fill="url(#sky)"/>';
+ if(day){
+  h+='<circle cx="480" cy="62" r="56" fill="url(#sunGlow)"/><circle cx="480" cy="62" r="24" fill="#FFD95A"/>';
+  const cloud=(x,y,k)=>'<g transform="translate('+x+' '+y+') scale('+k+')" fill="#fff" opacity=".9"><ellipse cx="0" cy="10" rx="34" ry="13"/><ellipse cx="-16" cy="4" rx="16" ry="12"/><ellipse cx="10" cy="0" rx="20" ry="16"/></g>';
+  h+=cloud(110,58,1)+cloud(300,36,.8)+cloud(560,110,.7)+cloud(390,96,.6);
+  h+='<path d="M0 200 L80 176 L150 190 L230 166 L320 186 L420 160 L520 180 L600 170 L600 236 L0 236Z" fill="#7FA7C9"/><path d="M0 222 L600 210 L600 400 L0 400Z" fill="#3A4558"/><line x1="0" y1="262" x2="600" y2="250" stroke="#FFD24B" stroke-width="4" stroke-dasharray="40 40" class="road"/>';
+ }else{
+  for(let i=0;i<40;i++)h+='<circle cx="'+((i*137)%600)+'" cy="'+((i*53)%150)+'" r="'+(i%3?0.8:1.3)+'" fill="#CFE3FF" opacity="'+(0.3+((i*7)%5)/10)+'"/>';
+  h+='<circle cx="470" cy="60" r="20" fill="#E9F1FF" opacity=".85"/><circle cx="479" cy="54" r="18" fill="#0F2240"/><path d="M0 200 L80 176 L150 190 L230 166 L320 186 L420 160 L520 180 L600 170 L600 236 L0 236Z" fill="#132646"/><path d="M0 222 L600 210 L600 400 L0 400Z" fill="#0E1A2C"/><line x1="0" y1="262" x2="600" y2="250" stroke="#FFC24B" stroke-width="4" stroke-dasharray="40 40" class="road"/>';
+ }
+ const brand=esc(((typeof D!=="undefined"&&D&&D.summary&&D.summary.company)||"FleetTrack").toUpperCase().slice(0,14));
+ /* extra paint: rims, glass, metal */
+ h+='<defs><radialGradient id="rim" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#E8EEF6"/><stop offset=".6" stop-color="#9AA8BC"/><stop offset="1" stop-color="#5C6B82"/></radialGradient><linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3B6290"/><stop offset=".55" stop-color="#173257"/><stop offset="1" stop-color="#0E2242"/></linearGradient><linearGradient id="metal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#B8C3D3"/><stop offset="1" stop-color="#6F7D92"/></linearGradient><linearGradient id="paint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".7" stop-color="#E3EAF3"/><stop offset="1" stop-color="#B7C4D6"/></linearGradient></defs>';
+ const GY=214; /* road contact line */
+ const shadow=(x1,x2)=>'<ellipse cx="'+((x1+x2)/2)+'" cy="'+(GY+2)+'" rx="'+((x2-x1)/2)+'" ry="8" fill="#000" opacity=".35"/>';
+ const arch=(cx,r)=>{const R=r*1.22,cy=GY-r;return '<path d="M'+(cx-R)+' '+(cy+3)+' A'+R+' '+R+' 0 0 1 '+(cx+R)+' '+(cy+3)+' Z" fill="#0A1220"/>'};
+ const wheel=(cx,r)=>{const cy=GY-r;let w='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="#0B0F18"/><circle cx="'+cx+'" cy="'+cy+'" r="'+(r*0.84)+'" fill="none" stroke="#1F2735" stroke-width="'+(r*0.1)+'"/><circle cx="'+cx+'" cy="'+cy+'" r="'+(r*0.58)+'" fill="url(#rim)"/>';
+   for(let i=0;i<5;i++){const a=i*72*Math.PI/180;w+='<line x1="'+cx+'" y1="'+cy+'" x2="'+(cx+Math.cos(a)*r*0.5).toFixed(1)+'" y2="'+(cy+Math.sin(a)*r*0.5).toFixed(1)+'" stroke="#6B7A90" stroke-width="'+(r*0.08)+'"/>'}
+   return w+'<circle cx="'+cx+'" cy="'+cy+'" r="'+(r*0.18)+'" fill="#2B3445"/>'};
+ const spoke=(cx,r)=>{const cy=GY-r;let w='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#0B0F18" stroke-width="'+(r*0.26)+'"/><circle cx="'+cx+'" cy="'+cy+'" r="'+(r*0.74)+'" fill="none" stroke="#9AA8BC" stroke-width="2.5"/>';
+   for(let i=0;i<12;i++){const a=i*30*Math.PI/180;w+='<line x1="'+cx+'" y1="'+cy+'" x2="'+(cx+Math.cos(a)*r*0.74).toFixed(1)+'" y2="'+(cy+Math.sin(a)*r*0.74).toFixed(1)+'" stroke="#8C99AD" stroke-width="1.2"/>'}
+   return w+'<circle cx="'+cx+'" cy="'+cy+'" r="5" fill="url(#rim)"/>'};
+ const beam=(x,y)=>day?'':'<path d="M'+x+' '+y+' L600 '+(y-42)+' L600 '+(y+56)+'Z" fill="url(#beam)"/>';
+ const light=(x,y,w,hh)=>'<rect x="'+x+'" y="'+y+'" width="'+(w||10)+'" height="'+(hh||8)+'" rx="2" fill="#FFE9A3"/><rect x="'+x+'" y="'+y+'" width="'+(w||10)+'" height="'+(hh||8)+'" rx="2" fill="#fff" opacity=".35"/>';
+ const tail=(x,y)=>'<rect x="'+x+'" y="'+y+'" width="5" height="14" rx="1.5" fill="#FF4D5E"/>';
+ const glare=(x1,y1,x2,y2)=>'<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="#fff" stroke-width="3" opacity=".22" stroke-linecap="round"/>';
+ const seam=(x,y1,y2)=>'<line x1="'+x+'" y1="'+y1+'" x2="'+x+'" y2="'+y2+'" stroke="#93A3B8" stroke-width="1.5"/>';
+ const handle=(x,y)=>'<rect x="'+x+'" y="'+y+'" width="12" height="3" rx="1.5" fill="#7D8BA0"/>';
+ const txt=(x,y,size,str)=>'<text x="'+x+'" y="'+y+'" font-family="Chakra Petch, sans-serif" font-size="'+size+'" font-weight="700" fill="#1F3A5F" opacity=".8">'+str+'</text>';
+ let g='';
+ if(cat==="bigtruck"){ /* 6/10-wheeler, wing van, refrigerated: rigid truck with long cargo body */
+  g=beam(468,174)+shadow(90,478)
+   +'<rect x="96" y="190" width="372" height="9" fill="#1B2433"/>'
+   +'<rect x="96" y="84" width="278" height="106" rx="4" fill="url(#trl)"/><rect x="96" y="84" width="278" height="9" fill="#38D3F5" opacity=".9"/>';
+  for(let x=142;x<374;x+=46)g+='<line x1="'+x+'" y1="96" x2="'+x+'" y2="188" stroke="#9FB0C6" stroke-width="1.2" opacity=".7"/>';
+  g+=txt(118,150,28,brand)+tail(96,168)
+   +'<path d="M378 199 V110 a8 8 0 0 1 8 -8 h46 a10 10 0 0 1 9 5 l26 46 v40 a6 6 0 0 1 -6 6 z" fill="url(#paint)"/>'
+   +'<path d="M392 112 h38 l22 40 h-60z" fill="url(#glass)"/>'+glare(402,116,420,148)
+   +seam(392,158,196)+handle(398,164)
+   +'<rect x="452" y="116" width="5" height="22" rx="2" fill="#2B3445"/>'
+   +'<rect x="378" y="172" width="90" height="4" fill="#38D3F5"/>'
+   +light(456,178)+'<rect x="452" y="190" width="18" height="10" rx="2" fill="url(#metal)"/>'
+   +arch(222,17)+arch(260,17)+arch(434,17)+wheel(222,17)+wheel(260,17)+wheel(434,17);
+ }else if(cat==="truck"){ /* 4-wheeler box truck */
+  g=beam(440,176)+shadow(134,450)
+   +'<rect x="140" y="190" width="300" height="8" fill="#1B2433"/>'
+   +'<rect x="140" y="100" width="212" height="90" rx="4" fill="url(#trl)"/><rect x="140" y="100" width="212" height="8" fill="#38D3F5" opacity=".9"/>';
+  for(let x=184;x<352;x+=44)g+='<line x1="'+x+'" y1="110" x2="'+x+'" y2="188" stroke="#9FB0C6" stroke-width="1.2" opacity=".7"/>';
+  g+=txt(158,156,24,brand)+tail(140,170)
+   +'<path d="M356 198 V122 a8 8 0 0 1 8 -8 h40 a10 10 0 0 1 9 5 l24 42 v31 a6 6 0 0 1 -6 6 z" fill="url(#paint)"/>'
+   +'<path d="M370 124 h32 l20 34 h-52z" fill="url(#glass)"/>'+glare(380,128,394,154)
+   +seam(370,162,194)+handle(376,168)
+   +'<rect x="428" y="126" width="5" height="18" rx="2" fill="#2B3445"/>'
+   +'<rect x="356" y="174" width="84" height="4" fill="#38D3F5"/>'
+   +light(428,180)+'<rect x="426" y="190" width="16" height="9" rx="2" fill="url(#metal)"/>'
+   +arch(200,17)+arch(410,17)+wheel(200,17)+wheel(410,17);
+ }else if(cat==="van"){ /* L300, closed van, multicab */
+  g=beam(442,176)+shadow(134,448)
+   +'<path d="M140 198 V112 a14 14 0 0 1 14 -14 h196 q14 0 24 10 l44 42 h16 a10 10 0 0 1 10 10 v30 a8 8 0 0 1 -8 8 z" fill="url(#paint)"/>'
+   +'<path d="M354 108 l40 40 h-40 z" fill="url(#glass)"/>'+glare(362,116,380,140)
+   +'<rect x="302" y="110" width="46" height="36" rx="4" fill="url(#glass)"/>'+glare(310,114,322,140)
+   +seam(298,108,196)+seam(352,150,196)+handle(306,160)+handle(358,160)
+   +'<rect x="140" y="156" width="292" height="5" fill="#38D3F5"/>'+txt(160,142,20,brand)
+   +'<rect x="398" y="128" width="5" height="16" rx="2" fill="#2B3445"/>'
+   +tail(140,146)+light(424,172)+'<rect x="420" y="188" width="20" height="10" rx="3" fill="url(#metal)"/>'
+   +'<rect x="136" y="188" width="14" height="10" rx="3" fill="url(#metal)"/>'
+   +arch(198,18)+arch(374,18)+wheel(198,18)+wheel(374,18);
+ }else if(cat==="pickup"){
+  g=beam(436,176)+shadow(130,446)
+   +'<path d="M136 198 V150 h172 v48 z" fill="url(#paint)"/><rect x="136" y="148" width="172" height="6" rx="2" fill="#1F2D44"/>'
+   +seam(150,156,196)+txt(214,182,12,brand)+tail(136,158)
+   +'<path d="M304 198 V128 a8 8 0 0 1 8 -8 h52 l32 34 h30 a10 10 0 0 1 10 10 v26 a8 8 0 0 1 -8 8 z" fill="url(#paint)"/>'
+   +'<path d="M316 128 h44 l26 28 h-70z" fill="url(#glass)"/>'+glare(326,132,340,152)
+   +'<line x1="352" y1="128" x2="352" y2="156" stroke="#E6ECF4" stroke-width="4"/>'
+   +seam(352,158,196)+handle(328,164)+'<rect x="384" y="138" width="5" height="16" rx="2" fill="#2B3445"/>'
+   +'<rect x="136" y="170" width="300" height="3" fill="#38D3F5"/>'
+   +light(424,166)+'<rect x="420" y="186" width="22" height="10" rx="3" fill="url(#metal)"/>'
+   +arch(190,18)+arch(380,18)+wheel(190,18)+wheel(380,18);
+ }else if(cat==="trike"){ /* Philippine tricycle: sidecar cabin joined to the motorcycle under one roof */
+  g=beam(392,134)+shadow(168,424)
+   +'<path d="M166 104 h214 a4 4 0 0 0 0 -8 h-206 a8 8 0 0 0 -8 8 z" fill="#38D3F5"/><path d="M166 104 h214 v5 h-214 z" fill="#1F9DBB"/>'
+   +'<line x1="364" y1="108" x2="352" y2="150" stroke="#2B3445" stroke-width="4"/>'
+   +'<path d="M180 196 V118 a10 10 0 0 1 10 -10 h146 v88 z" fill="url(#trl)"/>'
+   +'<rect x="196" y="120" width="70" height="38" rx="5" fill="url(#glass)"/>'+glare(204,124,218,154)
+   +'<rect x="276" y="120" width="44" height="38" rx="5" fill="url(#glass)"/>'+seam(270,112,196)
+   +'<rect x="180" y="164" width="156" height="4" fill="#38D3F5"/>'+txt(194,186,11,brand.slice(0,10))+tail(180,170)
+   +'<rect x="330" y="160" width="40" height="26" rx="5" fill="#3A4558"/>'
+   +'<path d="M330 150 h34 q6 0 4 6 h-38 z" fill="#16304F"/>'
+   +'<path d="M340 148 q20 -12 40 -2 l-5 10 h-35 z" fill="url(#paint)"/>'
+   +'<path d="M376 134 L396 190" stroke="#9AA6B8" stroke-width="6" stroke-linecap="round"/>'
+   +'<path d="M370 130 L378 120 L392 118" stroke="#2B3445" stroke-width="5" fill="none" stroke-linecap="round"/>'
+   +'<path d="M374 170 a26 26 0 0 1 44 6" fill="none" stroke="#C9D5E6" stroke-width="6" stroke-linecap="round"/>'
+   +'<circle cx="388" cy="138" r="7" fill="#FFE9A3"/><circle cx="388" cy="138" r="7" fill="#fff" opacity=".3"/>'
+   +arch(300,20)+spoke(300,20)+spoke(396,24);
+ }else{ /* motorcycle with delivery box */
+  g+=shadow(196,412);
+  g+='<rect x="196" y="94" width="68" height="54" rx="6" fill="url(#trl)"/><rect x="196" y="94" width="68" height="7" rx="3" fill="#38D3F5"/>'+txt(202,128,9.5,brand.slice(0,10))+'<rect x="204" y="146" width="60" height="5" fill="#2B3445"/><path d="M214 151 L232 168 M254 151 L248 166" stroke="#2B3445" stroke-width="4" stroke-linecap="round"/>';
+  g+=beam(374,132)
+   +'<path d="M206 168 a30 30 0 0 1 52 -6" fill="none" stroke="#C9D5E6" stroke-width="6" stroke-linecap="round"/>'
+   +'<path d="M230 188 L286 168" stroke="#4A5568" stroke-width="7" stroke-linecap="round"/>'
+   +'<rect x="270" y="158" width="52" height="30" rx="6" fill="#3A4558"/><rect x="278" y="164" width="18" height="16" rx="3" fill="#56637A"/>'
+   +'<path d="M262 186 L206 182" stroke="url(#metal)" stroke-width="6" stroke-linecap="round"/>'
+   +'<path d="M236 150 h66 q8 0 5 7 h-74 z" fill="#16304F"/>'
+   +'<path d="M296 150 q28 -16 56 -2 l-6 12 h-46 z" fill="url(#paint)"/><path d="M300 152 q22 -10 44 -1" stroke="#38D3F5" stroke-width="3" fill="none"/>'
+   +'<path d="M352 132 L380 188" stroke="#9AA6B8" stroke-width="6" stroke-linecap="round"/>'
+   +'<path d="M346 128 L354 118 L368 116" stroke="#2B3445" stroke-width="5" fill="none" stroke-linecap="round"/>'
+   +'<path d="M356 166 a28 28 0 0 1 46 6" fill="none" stroke="#C9D5E6" stroke-width="6" stroke-linecap="round"/>'
+   +'<circle cx="366" cy="136" r="8" fill="#FFE9A3"/><circle cx="366" cy="136" r="8" fill="#fff" opacity=".3"/>'
+   +spoke(230,26)+spoke(380,26);
+ }
+ $("heroSvg").innerHTML=h+g;
+}
+buildHero("truck");
 
 function ring(id,val,max,col,label){
  const r=48,c=2*Math.PI*r,arc=c*.75,p=val==null?0:Math.max(0,Math.min(1,val/max));
@@ -396,19 +517,35 @@ function renderKpis(){
   const k=[["truck","var(--cyan)","var(--cyan-soft)",S.inTransit,"In transit"],["check","var(--green)","var(--green-soft)",S.deliveredToday,"Delivered today"],["alert","var(--red)","var(--red-soft)",S.delayed,"Delayed"],["box","var(--yellow)","var(--yellow-soft)",S.pending,"Pending"],["clock","var(--orange)","var(--orange-soft)",D.summary.onTimeRate14d==null?"–":D.summary.onTimeRate14d+"%","On-time · 14 days"]];
   $("kpis").innerHTML=k.map(v=>'<div class="kpi"><span class="ic" style="background:'+v[2]+'">'+ic(v[0],v[1],22)+'</span><span class="v">'+v[3]+'</span><span class="l">'+v[4]+'</span></div>').join("");
 }
+let typeFilter="all";
+const vType=v=>(v.type||"").trim()||"Unspecified";
+/* Which picture to use for a vehicle, based on its Type in the Vehicles sheet */
+function vCat(v){const t=String((v&&v.type)||"").toLowerCase();
+  if(/motor|2.?wheel|two.?wheel|scooter|bike|moto/.test(t))return "moto";
+  if(/tricycle|3.?wheel|three.?wheel|trike|tuk/.test(t))return "trike";
+  if(/pick.?up/.test(t))return "pickup";
+  if(/6.?wheel|10.?wheel|12.?wheel|six|ten|wing|refriger|reefer|trailer|heavy|tanker|dump/.test(t))return "bigtruck";
+  if(/van|l300|multicab|closed/.test(t))return "van";
+  return "truck";}
 function renderFleet(){
   const V=D.summary.vehicles;
   $("fleetSum").textContent=V.onRoute+" of "+V.total+" on the road";
-  $("fleetList").innerHTML=D.vehicles.length?D.vehicles.map(v=>{const tg=stateTag(v.state);const line=v.destination?"to "+v.destination+" · "+mins(v.etaMinutes):v.state==="offline"?"last seen "+mins(v.lastSeenMinutes)+" ago":tg[1];
-    return '<button class="fl" data-sel="'+esc(v.id)+'" aria-pressed="'+(v.id===sel)+'"><span class="ic">'+ic("truck",stateColor(v.state),20)+'</span><span style="min-width:0"><b>'+esc(v.plate)+'</b><span class="sub">'+esc(v.driver||"")+' · '+esc(line)+'</span></span><span class="tag '+tg[0]+'">'+tg[1]+'</span></button>'}).join(""):'<div class="sub">No vehicles found. Add them to your Vehicles list.</div>';
-  $("vcards").innerHTML=D.vehicles.map(v=>{const tg=stateTag(v.state);const f=v.fuelPercent;const fc=f==null?"var(--muted)":f<20?"var(--red)":f<40?"var(--yellow)":"var(--green)";
-    return '<button class="vc" data-sel="'+esc(v.id)+'" aria-pressed="'+(v.id===sel)+'"><span class="row"><b style="font-family:var(--display);font-size:16px">'+esc(v.plate)+'</b><span class="tag '+tg[0]+'">'+tg[1]+'</span></span><span class="sub">'+esc(v.type||"")+'</span><span class="row"><span class="sub">Fuel</span><b style="color:'+(f!=null&&f<20?"var(--red)":"var(--ink)")+'">'+(f==null?"–":Math.round(f)+"%")+'</b></span><span class="meter"><i style="width:'+(f||0)+'%;background:'+fc+'"></i></span><span class="row"><span class="sub">Load</span><b>'+(v.loadPercent==null?"–":v.loadPercent+"%")+'</b></span><span class="row"><span class="sub">Speed</span><b>'+(v.speedKmh==null?"–":Math.round(v.speedKmh)+" km/h")+'</b></span></button>'}).join("");
+  const counts={};D.vehicles.forEach(v=>{const t=vType(v);counts[t]=(counts[t]||0)+1});
+  if(typeFilter!=="all"&&!counts[typeFilter])typeFilter="all";
+  $("typeChips").innerHTML=Object.keys(counts).length>1?'<button class="chip" data-type="all" aria-pressed="'+(typeFilter==="all")+'">All types · '+D.vehicles.length+'</button>'+Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([t,n])=>'<button class="chip" data-type="'+esc(t)+'" aria-pressed="'+(typeFilter===t)+'">'+esc(t)+' · '+n+'</button>').join(""):"";
+  const list=D.vehicles.filter(v=>typeFilter==="all"||vType(v)===typeFilter);
+  $("fleetList").innerHTML=list.length?list.map(v=>{const tg=stateTag(v.state);const line=v.destination?"to "+v.destination+" · "+mins(v.etaMinutes):v.state==="offline"?"last seen "+mins(v.lastSeenMinutes)+" ago":tg[1];
+    return '<button class="fl" data-sel="'+esc(v.id)+'" aria-pressed="'+(v.id===sel)+'"><span class="ic">'+ic(vCat(v),stateColor(v.state),20)+'</span><span style="min-width:0"><b>'+esc(v.plate)+' <span style="font-weight:500;color:var(--cyan);font-size:12px">'+esc(vType(v))+'</span></b><span class="sub">'+esc(v.driver||"")+' · '+esc(line)+'</span></span><span class="tag '+tg[0]+'">'+tg[1]+'</span></button>'}).join(""):'<div class="sub">'+(D.vehicles.length?"No vehicles of this type.":"No vehicles found. Add them to your Vehicles list.")+'</div>';
+  $("vcardsSub").textContent=(typeFilter==="all"?"":"Showing "+typeFilter+" · ")+"Tap a card to follow the vehicle";
+  $("vcards").innerHTML=list.map(v=>{const tg=stateTag(v.state);const f=v.fuelPercent;const fc=f==null?"var(--muted)":f<20?"var(--red)":f<40?"var(--yellow)":"var(--green)";
+    return '<button class="vc" data-sel="'+esc(v.id)+'" aria-pressed="'+(v.id===sel)+'"><span class="row"><b style="font-family:var(--display);font-size:16px">'+esc(v.plate)+'</b><span class="tag '+tg[0]+'">'+tg[1]+'</span></span><span class="row" style="justify-content:flex-start;gap:6px">'+ic(vCat(v),"var(--cyan)",18)+'<span style="font-weight:600;color:var(--ink)">'+esc(vType(v))+'</span></span><span class="row"><span class="sub">Capacity</span><b>'+(v.capacityKg?Number(v.capacityKg).toLocaleString()+" kg":"–")+'</b></span><span class="row"><span class="sub">Fuel</span><b style="color:'+(f!=null&&f<20?"var(--red)":"var(--ink)")+'">'+(f==null?"–":Math.round(f)+"%")+'</b></span><span class="meter"><i style="width:'+(f||0)+'%;background:'+fc+'"></i></span><span class="row"><span class="sub">Load</span><b>'+(v.loadPercent==null?"–":v.loadPercent+"%")+'</b></span><span class="row"><span class="sub">Speed</span><b>'+(v.speedKmh==null?"–":Math.round(v.speedKmh)+" km/h")+'</b></span></button>'}).join("");
 }
+document.addEventListener("click",e=>{const c=e.target.closest("[data-type]");if(c){typeFilter=c.dataset.type;const first=typeFilter==="all"?null:D.vehicles.find(v=>vType(v)===typeFilter);if(first)select(first.id);else renderFleet()}});
 function renderSel(){
   const v=D.vehicles.find(x=>x.id===sel);
   if(!v){$("heroPlate").textContent="No vehicle";return}
   const tg=stateTag(v.state);
-  $("heroTag").className="tag "+tg[0];$("heroTag").textContent=tg[1];$("heroType").textContent=v.type||"";
+  buildHero(vCat(v));$("heroTag").className="tag "+tg[0];$("heroTag").textContent=tg[1];$("heroType").textContent=v.type||"";
   $("heroPlate").textContent=v.plate;$("heroSeen").textContent=v.position?"GPS "+(v.lastSeenMinutes===0?"just now":mins(v.lastSeenMinutes)+" ago"):"No GPS signal";
   $("hDriver").textContent=(v.driver||"–").split(" ")[0];$("hSpeed").textContent=v.speedKmh==null?"–":Math.round(v.speedKmh)+" km/h";
   $("hDest").textContent=v.destination||(v.state==="idle"?"At base":"–");
@@ -418,6 +555,7 @@ function renderSel(){
   ring("gSpeed",v.speedKmh,120,v.speedKmh>80?"#FF5D6C":"#38D3F5",v.speedKmh==null?"–":Math.round(v.speedKmh));
   ring("gFuel",v.fuelPercent,100,v.fuelPercent==null?"#8CA1BF":v.fuelPercent<20?"#FF5D6C":v.fuelPercent<40?"#FFC24B":"#3DDC97",v.fuelPercent==null?"–":Math.round(v.fuelPercent));
   $("vhLoad").textContent=v.loadPercent==null?(v.loadKg?v.loadKg.toLocaleString()+" kg":"–"):v.loadKg.toLocaleString()+" kg · "+v.loadPercent+"%";$("vhLoadBar").style.width=(v.loadPercent||0)+"%";
+  $("vhType").textContent=v.type||"–";$("vhCap").textContent=v.capacityKg?Number(v.capacityKg).toLocaleString()+" kg":"–";
   $("vhOdo").textContent=v.odometerKm==null?"–":Math.round(v.odometerKm).toLocaleString()+" km";
   $("vhPhone").textContent=v.phone||"–";
   $("vhPos").textContent=v.position?v.position.lat.toFixed(4)+", "+v.position.lng.toFixed(4):"–";
@@ -439,7 +577,7 @@ function renderShips(){
     .filter(s=>!q||[s.id,s.customer,s.destination].some(x=>String(x).toLowerCase().includes(q))).slice(0,150);
   $("shipBody").innerHTML=rows.length?rows.map(s=>{
     const eta=s.status==="Delivered"?"Done "+fmtTime(s.deliveredAt):s.etaAt?fmtTime(s.etaAt)+' <span class="sub">('+mins(s.etaMinutes)+(s.weatherSlowdown?', weather':'')+')</span>':"–";
-    const truck=s.truck?'<button class="btn sm" data-sel="'+esc(s.truck)+'">'+esc(s.plate||s.truck)+'</button>':'<select data-assign="'+esc(s.id)+'" aria-label="Assign truck to '+esc(s.id)+'"><option value="">Assign…</option>'+D.vehicles.filter(v=>v.state!=="maintenance").map(v=>'<option value="'+esc(v.id)+'">'+esc(v.plate)+'</option>').join("")+'</select>';
+    const truck=s.truck?'<button class="btn sm" data-sel="'+esc(s.truck)+'">'+esc(s.plate||s.truck)+'</button>'+(s.vehicleType?'<div class="sub" style="margin-top:2px">'+esc(s.vehicleType)+'</div>':''):'<select data-assign="'+esc(s.id)+'" aria-label="Assign truck to '+esc(s.id)+'"><option value="">Assign…</option>'+D.vehicles.filter(v=>v.state!=="maintenance").map(v=>'<option value="'+esc(v.id)+'">'+esc(v.plate)+' · '+esc(vType(v))+'</option>').join("")+'</select>';
     const act=s.status==="In transit"||s.status==="Pending"?'<button class="btn sm" data-done="'+esc(s.id)+'" title="Mark delivered" aria-label="Mark '+esc(s.id)+' delivered">✓ Done</button>':'';
     return '<tr><td style="font-family:var(--display);color:var(--cyan)">'+esc(s.id)+'</td><td>'+esc(s.customer)+'</td><td>'+esc(s.destination)+'</td><td>'+(s.status==="Pending"||s.status==="In transit"?wxTag(s.weather,s.weather&&s.weather.risk===0):'<span class="sub">–</span>')+'</td><td>'+truck+'</td><td style="text-align:right">'+(Number(s.weightKg)||0).toLocaleString()+' kg</td><td>'+fmtDue(s.dueBy)+'</td><td>'+eta+'</td><td><span class="tag '+shipTag(s.displayStatus)+'">'+esc(s.displayStatus)+(s.status==="Delivered"&&s.late?" late":"")+'</span></td><td>'+act+'</td></tr>'}).join(""):'<tr><td colspan="10" class="sub" style="padding:16px 8px">No shipments match.</td></tr>';
 }
@@ -464,7 +602,7 @@ $("addToggle").onclick=()=>{
   const pl=(D.places||[]).slice().sort((a,b)=>(a.depot-b.depot)||a.name.localeCompare(b.name));
   $("fDest").innerHTML=pl.map(p=>'<option value="'+esc(p.name)+'">'+esc(p.name)+(p.depot?' (depot)':'')+'</option>').join("")+'<option value="__other">Other location… (type it in)</option>';
   showOther();
-  $("fTruck").innerHTML='<option value="">Assign later</option>'+D.vehicles.filter(v=>v.state!=="maintenance").map(v=>'<option value="'+esc(v.id)+'">'+esc(v.plate)+' · '+stateTag(v.state)[1]+'</option>').join("");
+  $("fTruck").innerHTML='<option value="">Assign later</option>'+D.vehicles.filter(v=>v.state!=="maintenance").map(v=>'<option value="'+esc(v.id)+'">'+esc(v.plate)+' · '+esc(vType(v))+(v.capacityKg?' · '+Number(v.capacityKg).toLocaleString()+' kg':'')+' · '+stateTag(v.state)[1]+'</option>').join("");
   $("addForm").hidden=!$("addForm").hidden;if(!$("addForm").hidden)$("fCust").focus();
 };
 let geoHits=[];
