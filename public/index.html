@@ -231,6 +231,7 @@ tr:hover td{background:rgba(56,211,245,.04)}
 
   <section class="p s12">
     <div class="ph"><h2>Vehicles</h2><span class="sub" id="vcardsSub">Tap a card to follow the vehicle</span></div>
+    <div class="chips" id="vcFilter" aria-label="Show vehicles by status" style="margin-bottom:12px"></div>
     <div class="vcards" id="vcards"></div>
   </section>
 
@@ -517,7 +518,7 @@ function renderKpis(){
   const k=[["truck","var(--cyan)","var(--cyan-soft)",S.inTransit,"In transit"],["check","var(--green)","var(--green-soft)",S.deliveredToday,"Delivered today"],["alert","var(--red)","var(--red-soft)",S.delayed,"Delayed"],["box","var(--yellow)","var(--yellow-soft)",S.pending,"Pending"],["clock","var(--orange)","var(--orange-soft)",D.summary.onTimeRate14d==null?"–":D.summary.onTimeRate14d+"%","On-time · 14 days"]];
   $("kpis").innerHTML=k.map(v=>'<div class="kpi"><span class="ic" style="background:'+v[2]+'">'+ic(v[0],v[1],22)+'</span><span class="v">'+v[3]+'</span><span class="l">'+v[4]+'</span></div>').join("");
 }
-let typeFilter="all";
+let typeFilter="all",vcFilter="active";
 const vType=v=>(v.type||"").trim()||"Unspecified";
 /* Which picture to use for a vehicle, based on its Type in the Vehicles sheet */
 function vCat(v){const t=String((v&&v.type)||"").toLowerCase();
@@ -533,13 +534,23 @@ function renderFleet(){
   const counts={};D.vehicles.forEach(v=>{const t=vType(v);counts[t]=(counts[t]||0)+1});
   if(typeFilter!=="all"&&!counts[typeFilter])typeFilter="all";
   $("typeChips").innerHTML=Object.keys(counts).length>1?'<button class="chip" data-type="all" aria-pressed="'+(typeFilter==="all")+'">All types · '+D.vehicles.length+'</button>'+Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([t,n])=>'<button class="chip" data-type="'+esc(t)+'" aria-pressed="'+(typeFilter===t)+'">'+esc(t)+' · '+n+'</button>').join(""):"";
-  const list=D.vehicles.filter(v=>typeFilter==="all"||vType(v)===typeFilter);
+  let list=D.vehicles.filter(v=>typeFilter==="all"||vType(v)===typeFilter);
   $("fleetList").innerHTML=list.length?list.map(v=>{const tg=stateTag(v.state);const line=v.destination?"to "+v.destination+" · "+mins(v.etaMinutes):v.state==="offline"?"last seen "+mins(v.lastSeenMinutes)+" ago":tg[1];
     return '<button class="fl" data-sel="'+esc(v.id)+'" aria-pressed="'+(v.id===sel)+'"><span class="ic">'+ic(vCat(v),stateColor(v.state),20)+'</span><span style="min-width:0"><b>'+esc(v.plate)+' <span style="font-weight:500;color:var(--cyan);font-size:12px">'+esc(vType(v))+'</span></b><span class="sub">'+esc(v.driver||"")+' · '+esc(line)+'</span></span><span class="tag '+tg[0]+'">'+tg[1]+'</span></button>'}).join(""):'<div class="sub">'+(D.vehicles.length?"No vehicles of this type.":"No vehicles found. Add them to your Vehicles list.")+'</div>';
   $("vcardsSub").textContent=(typeFilter==="all"?"":"Showing "+typeFilter+" · ")+"Tap a card to follow the vehicle";
+  /* Vehicles panel: by default show only vehicles doing a delivery; idle and maintenance are one click away */
+  const grp=v=>(v.state==="maintenance"||v.state==="offline")?"attention":v.destination?"active":"idle";
+  const gc={active:0,idle:0,attention:0};list.forEach(v=>gc[grp(v)]++);
+  const opts=[["active","On delivery",gc.active],["idle","Available",gc.idle],["attention","Maintenance / offline",gc.attention],["all","All",list.length]];
+  $("vcFilter").innerHTML=opts.map(o=>'<button class="chip" data-vcf="'+o[0]+'" aria-pressed="'+(vcFilter===o[0])+'">'+o[1]+' · '+o[2]+'</button>').join("");
+  const order={active:0,idle:1,attention:2};
+  const shown=list.filter(v=>vcFilter==="all"||grp(v)===vcFilter).sort((a,b)=>order[grp(a)]-order[grp(b)]||(a.etaMinutes??1e9)-(b.etaMinutes??1e9));
+  if(!shown.length){$("vcards").innerHTML='<div class="sub" style="grid-column:1/-1;padding:18px 4px">'+(vcFilter==="active"?"No vehicle is on a delivery right now. "+gc.idle+" available"+(gc.attention?" · "+gc.attention+" in maintenance or offline":"")+". Assign a shipment to see it here.":"No vehicles in this group.")+'</div>';return}
+  list=shown;
   $("vcards").innerHTML=list.map(v=>{const tg=stateTag(v.state);const f=v.fuelPercent;const fc=f==null?"var(--muted)":f<20?"var(--red)":f<40?"var(--yellow)":"var(--green)";
-    return '<button class="vc" data-sel="'+esc(v.id)+'" aria-pressed="'+(v.id===sel)+'"><span class="row"><b style="font-family:var(--display);font-size:16px">'+esc(v.plate)+'</b><span class="tag '+tg[0]+'">'+tg[1]+'</span></span><span class="row" style="justify-content:flex-start;gap:6px">'+ic(vCat(v),"var(--cyan)",18)+'<span style="font-weight:600;color:var(--ink)">'+esc(vType(v))+'</span></span><span class="row"><span class="sub">Capacity</span><b>'+(v.capacityKg?Number(v.capacityKg).toLocaleString()+" kg":"–")+'</b></span><span class="row"><span class="sub">Fuel</span><b style="color:'+(f!=null&&f<20?"var(--red)":"var(--ink)")+'">'+(f==null?"–":Math.round(f)+"%")+'</b></span><span class="meter"><i style="width:'+(f||0)+'%;background:'+fc+'"></i></span><span class="row"><span class="sub">Load</span><b>'+(v.loadPercent==null?"–":v.loadPercent+"%")+'</b></span><span class="row"><span class="sub">Speed</span><b>'+(v.speedKmh==null?"–":Math.round(v.speedKmh)+" km/h")+'</b></span></button>'}).join("");
+    return '<button class="vc" data-sel="'+esc(v.id)+'" aria-pressed="'+(v.id===sel)+'"><span class="row"><b style="font-family:var(--display);font-size:16px">'+esc(v.plate)+'</b><span class="tag '+tg[0]+'">'+tg[1]+'</span></span><span class="row" style="justify-content:flex-start;gap:6px">'+ic(vCat(v),"var(--cyan)",18)+'<span style="font-weight:600;color:var(--ink)">'+esc(vType(v))+'</span></span>'+(v.destination?'<span class="row"><span class="sub">To</span><b style="text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%">'+esc(v.destination)+(v.etaMinutes!=null?' · '+mins(v.etaMinutes):'')+'</b></span>':'')+'<span class="row"><span class="sub">Capacity</span><b>'+(v.capacityKg?Number(v.capacityKg).toLocaleString()+" kg":"–")+'</b></span><span class="row"><span class="sub">Fuel</span><b style="color:'+(f!=null&&f<20?"var(--red)":"var(--ink)")+'">'+(f==null?"–":Math.round(f)+"%")+'</b></span><span class="meter"><i style="width:'+(f||0)+'%;background:'+fc+'"></i></span><span class="row"><span class="sub">Load</span><b>'+(v.loadPercent==null?"–":v.loadPercent+"%")+'</b></span><span class="row"><span class="sub">Speed</span><b>'+(v.speedKmh==null?"–":Math.round(v.speedKmh)+" km/h")+'</b></span></button>'}).join("");
 }
+document.addEventListener("click",e=>{const f=e.target.closest("[data-vcf]");if(f){vcFilter=f.dataset.vcf;renderFleet();return}});
 document.addEventListener("click",e=>{const c=e.target.closest("[data-type]");if(c){typeFilter=c.dataset.type;const first=typeFilter==="all"?null:D.vehicles.find(v=>vType(v)===typeFilter);if(first)select(first.id);else renderFleet()}});
 function renderSel(){
   const v=D.vehicles.find(x=>x.id===sel);
