@@ -78,6 +78,9 @@ button{cursor:pointer}
 .leaflet-control-attribution a{color:var(--cyan)!important}
 .tm{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;border:2px solid #0A1424;font:700 10px var(--body);color:#05202B}
 .tm.sel{box-shadow:0 0 0 6px rgba(56,211,245,.25)}
+.pin{padding:3px 8px;border-radius:999px;font:700 11px var(--body);white-space:nowrap;border:2px solid #0A1424;box-shadow:0 2px 6px rgba(0,0,0,.4);transform:translate(-50%,-130%);display:inline-block}
+.pin.start{background:#FF8A2A;color:#1A0E02}.pin.end{background:#3DDC97;color:#04210F}
+.pdot{position:absolute;left:-7px;top:-7px;width:14px;height:14px;border-radius:50%;border:3px solid #0A1424}.pdot.start{background:#FF8A2A}.pdot.end{background:#3DDC97}
 .gauges{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .gauge{display:flex;flex-direction:column;align-items:center;gap:2px}
 .gauge .l{font-size:12px;color:var(--muted)}
@@ -173,7 +176,8 @@ tr:hover td{background:rgba(56,211,245,.04)}
   </section>
 
   <section class="p s5">
-    <div class="ph"><h2>Live map</h2><span class="sub" id="gpsAge"></span></div>
+    <div class="ph"><h2>Live map</h2><span style="display:flex;gap:8px;align-items:center"><span class="sub" id="gpsAge"></span><button class="chip" id="mapMode" type="button">Show all vehicles</button></span></div>
+    <div class="sub" id="routeInfo" style="margin:-4px 0 8px;color:var(--ink)"></div>
     <div id="map"></div>
   </section>
 
@@ -249,6 +253,7 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const I={
  truck:'<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>',
+ trailer:'<path d="M1 6h13v9H1zM15 10h3l3 3v2h-6z"/><circle cx="4" cy="17.5" r="1.6"/><circle cx="8" cy="17.5" r="1.6"/><circle cx="16" cy="17.5" r="1.6"/><circle cx="20" cy="17.5" r="1.6"/>',
  bigtruck:'<path d="M1 5h14v10H1zM15 9h4l3 3v3h-7"/><circle cx="5" cy="17.5" r="1.8"/><circle cx="10" cy="17.5" r="1.8"/><circle cx="18.5" cy="17.5" r="1.8"/>',
  van:'<path d="M2 16V7a1 1 0 011-1h11l6 5v5"/><path d="M14 6v5h6"/><circle cx="7" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/><path d="M9 16.5h5.5"/>',
  pickup:'<path d="M2 15v-3h8V8h6l3 4h3v3"/><circle cx="7" cy="16.5" r="2"/><circle cx="17" cy="16.5" r="2"/><path d="M9 16.5h6"/>',
@@ -330,28 +335,62 @@ function initMap(){
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
   placeLayer=L.layerGroup().addTo(map);
 }
+let mapMode="one",fitKey="",remain=null,startPin=null,endPin=null;
+const kmBetween=(a,b)=>{const R=6371,t=Math.PI/180,dLa=(b[0]-a[0])*t,dLo=(b[1]-a[1])*t;const h=Math.sin(dLa/2)**2+Math.cos(a[0]*t)*Math.cos(b[0]*t)*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(h))};
+const pinIcon=(cls,text)=>L.divIcon({html:'<span class="pin '+cls+'">'+esc(text)+'</span><i class="pdot '+cls+'"></i>',className:"",iconSize:[0,0],iconAnchor:[0,0]});
 function renderMap(){
   if(!map)return;
+  const v=D.vehicles.find(x=>x.id===sel);
+  const one=mapMode==="one"&&v;
+  $("mapMode").textContent=mapMode==="one"?"Show all vehicles":"Show selected only";
+  /* saved places: only in "all" mode, so the selected route stays clear */
   placeLayer.clearLayers();
-  (D.places||[]).forEach(p=>{L.circleMarker([p.lat,p.lng],{radius:p.depot?7:4,color:p.depot?"#FF8A2A":"#8CA1BF",weight:2,fillColor:"#0A1424",fillOpacity:1}).bindTooltip(esc(p.name)+(p.depot?" (depot)":""),{direction:"top"}).addTo(placeLayer)});
+  if(!one)(D.places||[]).forEach(p=>{L.circleMarker([p.lat,p.lng],{radius:p.depot?7:4,color:p.depot?"#FF8A2A":"#8CA1BF",weight:2,fillColor:"#0A1424",fillOpacity:1}).bindTooltip(esc(p.name)+(p.depot?" (depot)":""),{direction:"top"}).addTo(placeLayer)});
+  /* vehicle markers: just the selected one, or all */
   const seen=new Set();const pts=[];
-  D.vehicles.forEach(v=>{
-    if(!v.position)return;seen.add(v.id);const ll=[v.position.lat,v.position.lng];pts.push(ll);
-    const html='<div class="tm'+(v.id===sel?' sel':'')+'" style="background:'+stateColor(v.state)+'">'+ic(vCat(v),"#05202B",17)+'</div>';
+  D.vehicles.forEach(x=>{
+    if(!x.position||(one&&x.id!==v.id))return;seen.add(x.id);const ll=[x.position.lat,x.position.lng];pts.push(ll);
+    const html='<div class="tm'+(x.id===sel?' sel':'')+'" style="background:'+stateColor(x.state)+'">'+ic(vCat(x),"#05202B",17)+'</div>';
     const icon=L.divIcon({html,className:"",iconSize:[30,30],iconAnchor:[15,15]});
-    if(markers[v.id]){markers[v.id].setLatLng(ll);markers[v.id].setIcon(icon)}
-    else{markers[v.id]=L.marker(ll,{icon,keyboard:true,title:v.plate}).addTo(map).on("click",()=>select(v.id))}
-    markers[v.id].bindTooltip(esc(v.plate)+" · "+esc(v.type||"Vehicle")+" · "+stateTag(v.state)[1]+(v.speedKmh!=null?" · "+Math.round(v.speedKmh)+" km/h":""),{direction:"top",offset:[0,-14]});
+    if(markers[x.id]){markers[x.id].setLatLng(ll);markers[x.id].setIcon(icon)}
+    else{markers[x.id]=L.marker(ll,{icon,keyboard:true,title:x.plate,zIndexOffset:500}).addTo(map).on("click",()=>select(x.id))}
+    markers[x.id].bindTooltip(esc(x.plate)+" · "+esc(x.type||"Vehicle")+" · "+stateTag(x.state)[1]+(x.speedKmh!=null?" · "+Math.round(x.speedKmh)+" km/h":""),{direction:"top",offset:[0,-14]});
   });
   Object.keys(markers).forEach(id=>{if(!seen.has(id)){map.removeLayer(markers[id]);delete markers[id]}});
-  const v=D.vehicles.find(x=>x.id===sel);
-  if(trail){map.removeLayer(trail);trail=null}
-  if(destMarker){map.removeLayer(destMarker);destMarker=null}
-  if(v&&v.trail&&v.trail.length>1)trail=L.polyline(v.trail,{color:"#38D3F5",weight:3,opacity:.8,dashArray:"6 6"}).addTo(map);
+  /* route of the selected vehicle: start (depot) -> travelled path -> live position -> destination */
+  [trail,destMarker,remain,startPin,endPin].forEach(l=>{if(l)map.removeLayer(l)});trail=destMarker=remain=startPin=endPin=null;
+  const depot=(D.places||[]).find(p=>p.depot);
   const job=v&&v.currentShipment&&D.shipments.find(s=>s.id===v.currentShipment);
-  if(job&&job.destLat!=null){destMarker=L.polyline([[v.position.lat,v.position.lng],[job.destLat,job.destLng]],{color:"#FF8A2A",weight:2,opacity:.7,dashArray:"2 8"}).addTo(map)}
-  if(!fitted&&pts.length){map.fitBounds(L.latLngBounds(pts.concat((D.places||[]).map(p=>[p.lat,p.lng]))).pad(0.1));fitted=true}
+  const live=v&&v.position?[v.position.lat,v.position.lng]:null;
+  const dest=job&&job.destLat!=null?[job.destLat,job.destLng]:null;
+  const origin=depot?[depot.lat,depot.lng]:null;
+  const routePts=[];
+  if(v&&live){
+    if(origin){startPin=L.marker(origin,{icon:pinIcon("start","Start · "+depot.name.replace(/\s*\(.*\)/,"")),interactive:false}).addTo(map);routePts.push(origin)}
+    const path=(v.trail&&v.trail.length>1)?v.trail:(origin&&dest?[origin,live]:null);
+    if(path)trail=L.polyline(path,{color:"#38D3F5",weight:4,opacity:.9}).addTo(map);
+    routePts.push(live);
+    if(dest){
+      remain=L.polyline([live,dest],{color:"#FF8A2A",weight:3,opacity:.9,dashArray:"8 8"}).addTo(map);
+      endPin=L.marker(dest,{icon:pinIcon("end","Destination · "+(job.destination||"")),interactive:false}).addTo(map);
+      routePts.push(dest);
+    }
+  }
+  /* route summary line above the map */
+  if(v){
+    const left=live&&dest?Math.round(kmBetween(live,dest)*1.3*10)/10:null;
+    $("routeInfo").innerHTML='<b>'+esc(v.plate)+'</b> · '+esc(vType(v))+' · '+(dest?esc((depot&&depot.name.replace(/\s*\(.*\)/,""))||"Start")+' → '+esc(job.destination)+(left!=null?' · '+left+' km left':'')+(v.etaMinutes!=null?' · ETA '+mins(v.etaMinutes):''):(v.state==="maintenance"?"In maintenance":"No active delivery · at or returning to base"));
+  }else $("routeInfo").textContent="";
+  /* zoom: refit when the selected vehicle or mode changes (not on every GPS update, so you can zoom freely) */
+  const key=(one?"one:":"all:")+(v?v.id:"")+":"+(dest?dest.join(","):"");
+  if(key!==fitKey){
+    fitKey=key;
+    const fitPts=one?(routePts.length?routePts:pts):pts.concat((D.places||[]).map(p=>[p.lat,p.lng]));
+    if(fitPts.length===1)map.setView(fitPts[0],14);
+    else if(fitPts.length)map.fitBounds(L.latLngBounds(fitPts).pad(0.25),{maxZoom:15});
+  }
 }
+document.addEventListener("click",e=>{if(e.target.closest("#mapMode")){mapMode=mapMode==="one"?"all":"one";fitKey="";renderMap()}});
 
 /* ---------- chart ---------- */
 function renderChart(){
@@ -375,8 +414,10 @@ document.querySelectorAll("[data-series]").forEach(b=>b.onclick=()=>{series=b.da
 /* ---------- hero ---------- */
 let heroCat=null;
 function isDay(){const hr=+new Date().toLocaleString("en-US",{timeZone:TZ,hour:"numeric",hour12:false})%24;return hr>=6&&hr<18}
-function buildHero(cat){
- const day=isDay(),key=cat+(day?"-day":"-night");
+function buildHero(sp){
+ if(typeof sp==="string")sp={kind:sp};
+ const cat=sp.kind;
+ const day=isDay(),key=JSON.stringify(sp)+(day?"-day":"-night");
  if(key===heroCat)return; heroCat=key;
  const hb=document.getElementById("hero");if(hb)hb.classList.toggle("day",day);
  let h='<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">'+(day?'<stop offset="0" stop-color="#4FA3E3"/><stop offset="1" stop-color="#BFE3F8"/>':'<stop offset="0" stop-color="#0B1A33"/><stop offset="1" stop-color="#1B3358"/>')+'</linearGradient><linearGradient id="trl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F2F6FB"/><stop offset="1" stop-color="#B9C6D8"/></linearGradient><linearGradient id="cab" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#C9D5E6"/></linearGradient><radialGradient id="beam" cx="0" cy=".5" r="1"><stop offset="0" stop-color="#FFF3C4" stop-opacity=".55"/><stop offset="1" stop-color="#FFF3C4" stop-opacity="0"/></radialGradient><radialGradient id="sunGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#FFF6C9" stop-opacity=".9"/><stop offset="1" stop-color="#FFF6C9" stop-opacity="0"/></radialGradient></defs><rect width="600" height="400" fill="url(#sky)"/>';
@@ -409,32 +450,63 @@ function buildHero(cat){
  const handle=(x,y)=>'<rect x="'+x+'" y="'+y+'" width="12" height="3" rx="1.5" fill="#7D8BA0"/>';
  const txt=(x,y,size,str)=>'<text x="'+x+'" y="'+y+'" font-family="Chakra Petch, sans-serif" font-size="'+size+'" font-weight="700" fill="#1F3A5F" opacity=".8">'+str+'</text>';
  let g='';
- if(cat==="bigtruck"){ /* 6/10-wheeler, wing van, refrigerated: rigid truck with long cargo body */
-  g=beam(468,174)+shadow(90,478)
-   +'<rect x="96" y="190" width="372" height="9" fill="#1B2433"/>'
-   +'<rect x="96" y="84" width="278" height="106" rx="4" fill="url(#trl)"/><rect x="96" y="84" width="278" height="9" fill="#38D3F5" opacity=".9"/>';
-  for(let x=142;x<374;x+=46)g+='<line x1="'+x+'" y1="96" x2="'+x+'" y2="188" stroke="#9FB0C6" stroke-width="1.2" opacity=".7"/>';
-  g+=txt(118,150,28,brand)+tail(96,168)
-   +'<path d="M378 199 V110 a8 8 0 0 1 8 -8 h46 a10 10 0 0 1 9 5 l26 46 v40 a6 6 0 0 1 -6 6 z" fill="url(#paint)"/>'
-   +'<path d="M392 112 h38 l22 40 h-60z" fill="url(#glass)"/>'+glare(402,116,420,148)
-   +seam(392,158,196)+handle(398,164)
-   +'<rect x="452" y="116" width="5" height="22" rx="2" fill="#2B3445"/>'
-   +'<rect x="378" y="172" width="90" height="4" fill="#38D3F5"/>'
-   +light(456,178)+'<rect x="452" y="190" width="18" height="10" rx="2" fill="url(#metal)"/>'
-   +arch(222,17)+arch(260,17)+arch(434,17)+wheel(222,17)+wheel(260,17)+wheel(434,17);
- }else if(cat==="truck"){ /* 4-wheeler box truck */
-  g=beam(440,176)+shadow(134,450)
-   +'<rect x="140" y="190" width="300" height="8" fill="#1B2433"/>'
-   +'<rect x="140" y="100" width="212" height="90" rx="4" fill="url(#trl)"/><rect x="140" y="100" width="212" height="8" fill="#38D3F5" opacity=".9"/>';
-  for(let x=184;x<352;x+=44)g+='<line x1="'+x+'" y1="110" x2="'+x+'" y2="188" stroke="#9FB0C6" stroke-width="1.2" opacity=".7"/>';
-  g+=txt(158,156,24,brand)+tail(140,170)
-   +'<path d="M356 198 V122 a8 8 0 0 1 8 -8 h40 a10 10 0 0 1 9 5 l24 42 v31 a6 6 0 0 1 -6 6 z" fill="url(#paint)"/>'
-   +'<path d="M370 124 h32 l20 34 h-52z" fill="url(#glass)"/>'+glare(380,128,394,154)
-   +seam(370,162,194)+handle(376,168)
-   +'<rect x="428" y="126" width="5" height="18" rx="2" fill="#2B3445"/>'
-   +'<rect x="356" y="174" width="84" height="4" fill="#38D3F5"/>'
-   +light(428,180)+'<rect x="426" y="190" width="16" height="9" rx="2" fill="url(#metal)"/>'
-   +arch(200,17)+arch(410,17)+wheel(200,17)+wheel(410,17);
+ const cab=(x,w,hh)=>{const T=199-hh;return '<path d="M'+x+' 199 V'+(T+8)+' a8 8 0 0 1 8 -8 h'+(w-36)+' a10 10 0 0 1 9 5 l19 34 V193 a6 6 0 0 1 -6 6 z" fill="url(#paint)"/>'
+   +'<path d="M'+(x+14)+' '+(T+10)+' h'+(w-46)+' l17 32 h'+(-(w-29))+' z" fill="url(#glass)"/>'+glare(x+24,T+14,x+38,T+38)
+   +seam(x+14,T+48,196)+handle(x+20,T+56)+'<rect x="'+(x+w-12)+'" y="'+(T+10)+'" width="5" height="22" rx="2" fill="#2B3445"/>'
+   +'<rect x="'+x+'" y="'+Math.round(T+hh*0.64)+'" width="'+w+'" height="4" fill="#38D3F5"/>'
+   +'<rect x="'+(x+w-22)+'" y="'+(T+hh-40)+'" width="16" height="12" rx="2" fill="#2B3445" opacity=".55"/>'
+   +light(x+w-13,175)+'<rect x="'+(x+w-16)+'" y="189" width="18" height="10" rx="2" fill="url(#metal)"/>'};
+ if(cat==="rigid"){ /* 4 / 6 / 10 / 12-wheeler trucks with box, wing van, dropside or reefer body */
+  const n=sp.n||4,body=sp.body||"box";
+  const S={4:{L:190,H:84,r:16,f:1,b:1},6:{L:228,H:98,r:17,f:1,b:1},10:{L:262,H:104,r:17,f:1,b:2},12:{L:276,H:106,r:17,f:2,b:2}}[n]||{L:190,H:84,r:16,f:1,b:1};
+  const cw=n>=10?96:90,total=S.L+6+cw,x0=Math.round(298-total/2),top=190-S.H,cx=x0+S.L+6;
+  g=beam(cx+cw-4,177)+shadow(x0-6,x0+total+8)+'<rect x="'+x0+'" y="190" width="'+total+'" height="9" fill="#1B2433"/>';
+  if(body==="drop"){ /* open cargo bed with low side gates */
+   const cargo=[[10,40,26,"#C9A36B"],[54,36,34,"#B8894F"],[94,44,22,"#D3B07A"],[142,38,30,"#B8894F"],[184,40,24,"#C9A36B"],[228,30,28,"#D3B07A"]];
+   cargo.forEach(c=>{if(c[0]+c[1]<S.L-12)g+='<rect x="'+(x0+c[0])+'" y="'+(156-c[2])+'" width="'+c[1]+'" height="'+(c[2]+2)+'" rx="3" fill="'+c[3]+'" stroke="#8A6A3E" stroke-width="1"/>'});
+   g+='<rect x="'+x0+'" y="182" width="'+S.L+'" height="8" fill="#5A4632"/><rect x="'+x0+'" y="156" width="'+S.L+'" height="26" rx="2" fill="url(#paint)"/>';
+   for(let x=x0+30;x<x0+S.L;x+=30)g+='<line x1="'+x+'" y1="156" x2="'+x+'" y2="182" stroke="#93A3B8" stroke-width="2"/>';
+   g+='<rect x="'+(x0+S.L-8)+'" y="'+(top+10)+'" width="8" height="'+(180-top-10)+'" fill="url(#metal)"/>'+txt(x0+12,175,13,brand)+tail(x0,162);
+  }else{ /* closed body: box (aluminium), wing van or reefer */
+   const fill=body==="reefer"?"url(#paint)":"url(#trl)";
+   g+='<rect x="'+x0+'" y="'+top+'" width="'+S.L+'" height="'+S.H+'" rx="4" fill="'+fill+'"/><rect x="'+x0+'" y="'+top+'" width="'+S.L+'" height="8" fill="#38D3F5" opacity=".9"/>';
+   if(body!=="reefer")for(let x=x0+44;x<x0+S.L;x+=44)g+='<line x1="'+x+'" y1="'+(top+10)+'" x2="'+x+'" y2="188" stroke="#9FB0C6" stroke-width="1.2" opacity=".7"/>';
+   if(body==="wing")g+='<line x1="'+x0+'" y1="'+(top+16)+'" x2="'+(x0+S.L)+'" y2="'+(top+16)+'" stroke="#6F7D92" stroke-width="2.5"/>'
+     +'<line x1="'+(x0+S.L/2)+'" y1="'+(top+16)+'" x2="'+(x0+S.L/2)+'" y2="188" stroke="#6F7D92" stroke-width="2"/>'
+     +'<rect x="'+x0+'" y="184" width="'+S.L+'" height="6" fill="#4A5568"/>';
+   if(body==="reefer")g+='<rect x="'+(x0+S.L-46)+'" y="'+(top-16)+'" width="40" height="22" rx="3" fill="#5C6B82"/>'
+     +[0,1,2,3].map(i=>'<line x1="'+(x0+S.L-40+i*9)+'" y1="'+(top-12)+'" x2="'+(x0+S.L-40+i*9)+'" y2="'+(top+2)+'" stroke="#8C99AD" stroke-width="2"/>').join("")
+     +'<text x="'+(x0+16)+'" y="'+(top+S.H-14)+'" font-family="Chakra Petch, sans-serif" font-size="13" font-weight="700" fill="#2B7BD6">❄ REFRIGERATED</text>';
+   g+=txt(x0+16,top+S.H/2+8,Math.min(28,Math.round(S.L/9)),brand)+tail(x0,170)+seam(x0+6,top+10,188);
+  }
+  g+=cab(cx,cw,n>=10?104:94);
+  const ax=[];const fr=cx+cw-34;ax.push(fr);if(S.f===2)ax.push(fr-2.4*S.r);
+  const r1=x0+Math.round(S.L*(S.b===2?0.24:0.3));ax.push(r1);if(S.b===2)ax.push(r1+Math.round(2.25*S.r));
+  ax.forEach(x=>{g+=arch(x,S.r)});ax.forEach(x=>{g+=wheel(x,S.r)});
+ }else if(cat==="trailer"){ /* tractor head pulling a 20-ft or 40-ft container */
+  const C=sp.ft===40?320:180,cw=96,total=C+8+cw,x0=Math.round(300-total/2),cx=x0+C+8;
+  g=beam(cx+cw-4,177)+shadow(x0-6,x0+total+8)
+   +'<rect x="'+x0+'" y="184" width="'+C+'" height="8" fill="#1B2433"/><rect x="'+(cx-44)+'" y="190" width="'+(cw+44)+'" height="9" fill="#1B2433"/>'
+   +'<rect x="'+x0+'" y="88" width="'+C+'" height="96" rx="2" fill="#2D5C8A"/>';
+  for(let x=x0+8;x<x0+C-4;x+=8)g+='<line x1="'+x+'" y1="92" x2="'+x+'" y2="180" stroke="#3E73A6" stroke-width="2.5"/>';
+  g+=[[x0,88],[x0+C-8,88],[x0,176],[x0+C-8,176]].map(c=>'<rect x="'+c[0]+'" y="'+c[1]+'" width="8" height="8" fill="#1B3A5C"/>').join("")
+   +'<text x="'+(x0+18)+'" y="146" font-family="Chakra Petch, sans-serif" font-size="'+(sp.ft===40?30:22)+'" font-weight="700" fill="#fff" opacity=".85">'+brand+'</text>'
+   +'<text x="'+(x0+18)+'" y="166" font-family="Inter, sans-serif" font-size="11" font-weight="600" fill="#BFD3EA">'+(sp.ft===40?"40-FT":"20-FT")+' CONTAINER</text>'
+   +'<rect x="'+(x0+C-70)+'" y="192" width="5" height="16" fill="#4A5568"/>'+tail(x0,186)
+   +cab(cx,cw,112);
+  const r=16,ax=[cx+cw-34,cx-14,cx-14-2.3*r];
+  const tn=sp.ft===40?3:2;for(let i=0;i<tn;i++)ax.push(x0+26+i*2.3*r);
+  ax.forEach(x=>{g+=arch(x,r)});ax.forEach(x=>{g+=wheel(x,r)});
+ }else if(cat==="multicab"){ /* small kei-type utility vehicle with rear bed */
+  g=beam(390,178)+shadow(190,402)+'<rect x="196" y="190" width="198" height="9" fill="#1B2433"/>'
+   +'<rect x="196" y="158" width="124" height="34" rx="3" fill="url(#paint)"/><rect x="196" y="148" width="124" height="4" fill="#2B3445"/>'
+   +[196,258,316].map(x=>'<rect x="'+x+'" y="148" width="4" height="12" fill="#2B3445"/>').join("")
+   +'<rect x="196" y="176" width="124" height="3" fill="#38D3F5"/>'+txt(206,172,11,brand.slice(0,10))+tail(196,162)
+   +'<path d="M320 199 V132 a10 10 0 0 1 10 -10 h34 a12 12 0 0 1 11 7 l20 40 v24 a6 6 0 0 1 -6 6 z" fill="url(#paint)"/>'
+   +'<path d="M332 132 h30 l18 34 h-48 z" fill="url(#glass)"/>'+glare(340,136,350,160)
+   +seam(332,170,196)+handle(338,176)+'<rect x="384" y="134" width="4" height="14" rx="2" fill="#2B3445"/>'
+   +light(382,174)+'<rect x="380" y="189" width="18" height="10" rx="3" fill="url(#metal)"/>'
+   +arch(234,14)+arch(366,14)+wheel(234,14)+wheel(366,14);
  }else if(cat==="van"){ /* L300, closed van, multicab */
   g=beam(442,176)+shadow(134,448)
    +'<path d="M140 198 V112 a14 14 0 0 1 14 -14 h196 q14 0 24 10 l44 42 h16 a10 10 0 0 1 10 10 v30 a8 8 0 0 1 -8 8 z" fill="url(#paint)"/>'
@@ -491,7 +563,7 @@ function buildHero(cat){
  }
  $("heroSvg").innerHTML=h+g;
 }
-buildHero("truck");
+buildHero({kind:"rigid",n:4,body:"box"});
 
 function ring(id,val,max,col,label){
  const r=48,c=2*Math.PI*r,arc=c*.75,p=val==null?0:Math.max(0,Math.min(1,val/max));
@@ -521,13 +593,22 @@ function renderKpis(){
 let typeFilter="all",vcFilter="active";
 const vType=v=>(v.type||"").trim()||"Unspecified";
 /* Which picture to use for a vehicle, based on its Type in the Vehicles sheet */
-function vCat(v){const t=String((v&&v.type)||"").toLowerCase();
-  if(/motor|2.?wheel|two.?wheel|scooter|bike|moto/.test(t))return "moto";
-  if(/tricycle|3.?wheel|three.?wheel|trike|tuk/.test(t))return "trike";
-  if(/pick.?up/.test(t))return "pickup";
-  if(/6.?wheel|10.?wheel|12.?wheel|six|ten|wing|refriger|reefer|trailer|heavy|tanker|dump/.test(t))return "bigtruck";
-  if(/van|l300|multicab|closed/.test(t))return "van";
-  return "truck";}
+function vSpec(v){const t=String((v&&v.type)||"").toLowerCase();
+  if(/motor|(^|[^0-9])2\s*-?\s*wheel|two.?wheel|scooter|bike|moto/.test(t))return {kind:"moto"};
+  if(/tricycle|(^|[^0-9])3\s*-?\s*wheel|three.?wheel|trike|tuk/.test(t))return {kind:"trike"};
+  if(/multicab|multi.?cab|kei|mini.?truck/.test(t))return {kind:"multicab"};
+  if(/pick.?up/.test(t))return {kind:"pickup"};
+  if(/trailer|container|20.?ft|40.?ft|tractor|prime.?mover/.test(t))return {kind:"trailer",ft:/40/.test(t)?40:20};
+  if(/l300|fb.?van|panel.?van/.test(t))return {kind:"van"};
+  const m=t.match(/(\d+)\s*-?\s*wheel/),n0=m?+m[1]:0;
+  const body=/wing/.test(t)?"wing":/drop/.test(t)?"drop":/reefer|refriger|chill|freez/.test(t)?"reefer":"box";
+  if(!n0&&body==="box"&&/\bvan\b/.test(t)&&!/closed|alum/.test(t))return {kind:"van"};
+  const n=n0>=12?12:n0>=10?10:n0>=6?6:n0>=4?4:(body==="wing"?10:body==="box"&&!/truck/.test(t)?4:6);
+  return {kind:"rigid",n:n0?n:(body==="box"&&/closed|alum/.test(t)?4:n),body};}
+function vCat(v){const s=vSpec(v);
+  if(s.kind==="rigid")return s.n<=4?"truck":"bigtruck";
+  if(s.kind==="multicab")return "pickup";
+  return s.kind;}
 function renderFleet(){
   const V=D.summary.vehicles;
   $("fleetSum").textContent=V.onRoute+" of "+V.total+" on the road";
@@ -556,7 +637,7 @@ function renderSel(){
   const v=D.vehicles.find(x=>x.id===sel);
   if(!v){$("heroPlate").textContent="No vehicle";return}
   const tg=stateTag(v.state);
-  buildHero(vCat(v));$("heroTag").className="tag "+tg[0];$("heroTag").textContent=tg[1];$("heroType").textContent=v.type||"";
+  buildHero(vSpec(v));$("heroTag").className="tag "+tg[0];$("heroTag").textContent=tg[1];$("heroType").textContent=v.type||"";
   $("heroPlate").textContent=v.plate;$("heroSeen").textContent=v.position?"GPS "+(v.lastSeenMinutes===0?"just now":mins(v.lastSeenMinutes)+" ago"):"No GPS signal";
   $("hDriver").textContent=(v.driver||"–").split(" ")[0];$("hSpeed").textContent=v.speedKmh==null?"–":Math.round(v.speedKmh)+" km/h";
   $("hDest").textContent=v.destination||(v.state==="idle"?"At base":"–");
@@ -593,7 +674,7 @@ function renderShips(){
     return '<tr><td style="font-family:var(--display);color:var(--cyan)">'+esc(s.id)+'</td><td>'+esc(s.customer)+'</td><td>'+esc(s.destination)+'</td><td>'+(s.status==="Pending"||s.status==="In transit"?wxTag(s.weather,s.weather&&s.weather.risk===0):'<span class="sub">–</span>')+'</td><td>'+truck+'</td><td style="text-align:right">'+(Number(s.weightKg)||0).toLocaleString()+' kg</td><td>'+fmtDue(s.dueBy)+'</td><td>'+eta+'</td><td><span class="tag '+shipTag(s.displayStatus)+'">'+esc(s.displayStatus)+(s.status==="Delivered"&&s.late?" late":"")+'</span></td><td>'+act+'</td></tr>'}).join(""):'<tr><td colspan="10" class="sub" style="padding:16px 8px">No shipments match.</td></tr>';
 }
 
-function select(id){sel=id;renderFleet();renderSel();renderMap();const v=D.vehicles.find(x=>x.id===id);if(map&&v&&v.position)map.panTo([v.position.lat,v.position.lng])}
+function select(id){sel=id;renderFleet();renderSel();renderMap()}
 document.addEventListener("click",e=>{
   const b=e.target.closest("[data-sel]");if(b){select(b.dataset.sel);return}
   const sh=e.target.closest("[data-ship]");if(sh){filterSt="all";document.querySelectorAll("[data-st]").forEach(c=>c.setAttribute("aria-pressed",c.dataset.st==="all"));$("q").value=sh.dataset.ship;renderShips();$("q").scrollIntoView({behavior:"smooth",block:"center"})}
